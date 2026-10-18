@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, PackageSearch, RefreshCw, Search } from "lucide-react";
+import { AlertTriangle, Image as ImageIcon, PackageSearch, RefreshCw, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -27,6 +27,25 @@ function showValue(value: unknown): string {
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
   if (value == null) return "";
   try { return JSON.stringify(value); } catch { return ""; }
+}
+
+function ProductImage({ src, alt }: { src: string | null; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-subtle text-text-3">
+      {src && !failed ? (
+        // La URL de imagen proviene del catálogo de Meta y puede ser de cualquier CDN.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={alt}
+          loading="lazy"
+          onError={() => setFailed(true)}
+          className="h-full w-full object-cover"
+        />
+      ) : <ImageIcon className="h-5 w-5" aria-hidden />}
+    </div>
+  );
 }
 
 export function CatalogPage() {
@@ -116,40 +135,62 @@ export function CatalogPage() {
             </div>
 
             {filtered.length ? (
-              <ul className="space-y-2">
-                {filtered.map((product) => {
-                  const attributes = Object.entries(product.attributes).filter(([, value]) => value != null && showValue(value) !== "");
-                  return <li key={product.retailerId} className="rounded-lg border bg-card px-3 py-3 sm:px-4">
-                    <div className="flex flex-wrap items-start gap-x-3 gap-y-2 sm:flex-nowrap sm:gap-x-4">
-                      <div className="min-w-[60%] flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-medium">{product.name}</span>
+              <div className="overflow-x-auto rounded-lg border bg-card">
+                <table aria-label="Productos sincronizados del catálogo" className="w-full min-w-[760px] text-sm">
+                  <thead className="kicker border-b bg-subtle text-left">
+                    <tr>
+                      <th scope="col" className="px-3 py-2.5 font-medium sm:px-4">Producto</th>
+                      <th scope="col" className="px-3 py-2.5 font-medium">Marca</th>
+                      <th scope="col" className="px-3 py-2.5 font-medium">Precio</th>
+                      <th scope="col" className="px-3 py-2.5 font-medium">Disponibilidad</th>
+                      <th scope="col" className="px-3 py-2.5 font-medium">Información</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((product) => {
+                      const attributes = Object.entries(product.attributes).filter(([, value]) => value != null && showValue(value) !== "");
+                      return <tr key={product.retailerId} className="border-t align-middle first:border-t-0">
+                        <td className="px-3 py-3 sm:px-4">
+                          <div className="flex min-w-56 items-center gap-3">
+                            <ProductImage src={product.imageUrl} alt={`Imagen de ${product.name}`} />
+                            <div className="min-w-0">
+                              <p className="truncate font-medium" title={product.name}>{product.name}</p>
+                              <p className="truncate text-xs text-muted-foreground" title={product.description ?? product.retailerId}>
+                                {product.description ?? `ID: ${product.retailerId}`}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">{product.brand ?? <span className="text-text-3">—</span>}</td>
+                        <td className="whitespace-nowrap px-3 py-3 font-semibold">
+                          {product.price ? `${product.price}${product.currency ? ` ${product.currency}` : ""}` : <span className="font-normal text-text-3">—</span>}
+                        </td>
+                        <td className="px-3 py-3">
                           <Badge variant={product.availability === "in stock" ? "success" : "secondary"}>
-                            {product.availability === "in stock" ? "Disponible" : product.availability ?? "Disponibilidad no informada"}
+                            {product.availability === "in stock" ? "Disponible" : product.availability ?? "No informada"}
                           </Badge>
-                          {product.brand && <Badge variant="outline">{product.brand}</Badge>}
-                        </div>
-                        <p className="mt-0.5 text-xs text-muted-foreground">ID de producto: {product.retailerId}</p>
-                      </div>
-                      {product.price && <p className="shrink-0 text-sm font-semibold">{product.price}{product.currency ? ` ${product.currency}` : ""}</p>}
-                    </div>
-                    {product.description && <p className="mt-3 whitespace-pre-wrap text-sm text-text-2">{product.description}</p>}
-                    {(attributes.length > 0 || product.url || product.imageUrl) && <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t pt-2.5">
-                      {attributes.length > 0 && <details className="min-w-0 flex-1">
-                        <summary className="w-fit cursor-pointer text-xs font-semibold text-text-2">Más información ({attributes.length})</summary>
-                        <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
-                          {attributes.map(([key, value]) => <div key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-2 text-xs">
-                            <dt className="break-words text-muted-foreground">{key.replaceAll("_", " ")}</dt>
-                            <dd className="break-words">{showValue(value)}</dd>
-                          </div>)}
-                        </dl>
-                      </details>}
-                      {product.imageUrl && <a href={product.imageUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand hover:underline">Ver imagen</a>}
-                      {product.url && <a href={product.url} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand hover:underline">Abrir en tienda</a>}
-                    </div>}
-                  </li>;
-                })}
-              </ul>
+                        </td>
+                        <td className="px-3 py-3">
+                          {attributes.length > 0 || product.url ? <details className="max-w-64">
+                            <summary className="cursor-pointer whitespace-nowrap text-xs font-semibold text-brand">Ver detalles</summary>
+                            <div className="mt-2 max-h-72 w-72 max-w-full overflow-y-auto rounded-lg border bg-subtle p-3 text-xs">
+                              <p className="mb-2 font-semibold">ID: {product.retailerId}</p>
+                              {product.description && <p className="mb-3 whitespace-pre-wrap text-text-2">{product.description}</p>}
+                              {attributes.length > 0 && <dl className="space-y-2">
+                                {attributes.map(([key, value]) => <div key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-2 border-t pt-1.5">
+                                  <dt className="break-words text-muted-foreground">{key.replaceAll("_", " ")}</dt>
+                                  <dd className="break-words">{showValue(value)}</dd>
+                                </div>)}
+                              </dl>}
+                              {product.url && <a href={product.url} target="_blank" rel="noreferrer" className="mt-3 inline-block font-semibold text-brand hover:underline">Abrir en tienda</a>}
+                            </div>
+                          </details> : <span className="text-text-3">—</span>}
+                        </td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
             ) : (
               <EmptyState
                 icon={query ? Search : PackageSearch}
