@@ -528,6 +528,70 @@ export async function sendCatalogProducts(input: {
   return { messageId };
 }
 
+/** Envía una imagen HTTPS del catálogo como adjunto de WhatsApp. */
+export async function sendCatalogImage(input: {
+  conversationId: string;
+  organizationId: string;
+  imageUrl: string;
+  caption?: string;
+  aiGenerated?: boolean;
+}): Promise<SendResult> {
+  if (!catalogEnabled()) {
+    throw new SendError("meta_error", "El módulo de catálogo está desactivado");
+  }
+  let url: URL;
+  try {
+    url = new URL(input.imageUrl);
+  } catch {
+    throw new SendError("meta_error", "La URL de imagen del producto no es válida");
+  }
+  if (url.protocol !== "https:" || url.username || url.password) {
+    throw new SendError("meta_error", "La imagen del producto debe usar una URL HTTPS pública");
+  }
+
+  const target = await prepareSend(
+    input.conversationId,
+    input.organizationId,
+    input.aiGenerated ?? true
+  );
+  if (target.conversation.channel !== "whatsapp" || !target.credentials) {
+    throw new SendError("meta_error", "Los adjuntos del catálogo solo se pueden enviar por WhatsApp");
+  }
+  const caption = input.caption?.slice(0, 1024);
+  const waMessageId = await callGraphSend(target.credentials, {
+    messaging_product: "whatsapp",
+    ...target.destinatario,
+    type: "image",
+    image: { link: url.toString(), ...(caption ? { caption } : {}) },
+  });
+  const assetRows = await getDb()
+    .insert(schema.mediaAsset)
+    .values({
+      id: newId("mediaAsset"),
+      organizationId: input.organizationId,
+      kind: "image",
+      mimeType: "image/jpeg",
+      caption: caption ?? null,
+      payload: { externalUrl: url.toString() },
+      fetchStatus: "available",
+    })
+    .returning();
+  const asset = assetRows[0]!;
+  await persistOutbound({
+    organizationId: input.organizationId,
+    conversationId: input.conversationId,
+    waMessageId,
+    type: "image",
+    text: caption ?? null,
+    status: "pending",
+    aiGenerated: input.aiGenerated ?? true,
+    origin: input.aiGenerated === false ? "operator" : "ai",
+    mediaAssetId: asset.id,
+    media: asset,
+  });
+  return { messageId: waMessageId };
+}
+
 /**
  * 008 — Envía un adjunto de archivo (imagen/video/audio/documento).
  * El archivo queda ANTES en el volumen local (fuente durable de la preview);

@@ -9,7 +9,7 @@ import { isAiConfiguredFor } from "@/lib/ai/provider";
 import { publish } from "@/server/events/bus";
 import { isWindowOpen } from "@/server/inbox/window";
 import { windowMsFor } from "@/server/channels/capabilities";
-import { SendError, sendCatalogProducts, sendText } from "@/server/inbox/send";
+import { SendError, sendCatalogImage, sendCatalogProducts, sendText } from "@/server/inbox/send";
 import {
   degradeAction,
   resolveStage,
@@ -32,7 +32,7 @@ import { bookSlot, offerSlots } from "@/server/agenda/agent";
 import { getOffers, mapaDeHuecosParaModelo } from "@/server/agenda/offers";
 import { catalogEnabled } from "@/server/catalog/flag";
 import { getCatalogSnapshot, getFreshCatalog, isCatalogFresh, resolveInStockProducts } from "@/server/catalog/service";
-import { catalogContextForTurn } from "@/server/catalog/context";
+import { catalogContextForTurn, catalogProductsText } from "@/server/catalog/context";
 
 /**
  * Turno del agente (FR-021..FR-025).
@@ -251,7 +251,8 @@ export async function runAgentTurn(
     .orderBy(asc(schema.pipelineStage.position));
 
   const agenda = agendaEnabled();
-  const catalog = catalogEnabled() && conversation.channel === "whatsapp"
+  const catalogIsEnabled = catalogEnabled();
+  const catalog = catalogIsEnabled
     ? conversation.isTest
       ? await getCatalogSnapshot(organizationId).then((snapshot) => isCatalogFresh(snapshot) ? snapshot : null)
       : await getFreshCatalog(organizationId)
@@ -284,7 +285,7 @@ export async function runAgentTurn(
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: buildAgentSystemPrompt({ profile, kb, stages, agenda, catalog: catalogContext }),
+      content: buildAgentSystemPrompt({ profile, kb, stages, agenda, catalogEnabled: catalogIsEnabled, channel: conversation.channel, catalog: catalogContext }),
     },
     ...history
       .filter((m) => m.text)
@@ -317,29 +318,58 @@ export async function runAgentTurn(
   let action: AgentActionType = result.data;
 
   if (action.action === "send_products") {
-    if (!catalog || conversation.channel !== "whatsapp") {
+    if (!catalog) {
       action = degradeAction(action);
     } else {
-      try {
-        if (conversation.isTest) {
-          const selected = resolveInStockProducts(catalog, action.retailerIds);
-          if (!selected) {
-            throw new Error("El producto no está disponible en el snapshot del catálogo");
-          }
-          await persistTestOutbound(conversation, `Vista previa de producto: ${selected.map((p) => `${p.name}${p.price ? ` — ${p.price}` : ""}`).join("; ")}`);
-        } else {
-          await sendCatalogProducts({
-            conversationId,
-            organizationId,
-            retailerIds: action.retailerIds,
-            aiGenerated: true,
-          });
-        }
-        if (action.reply) await deliverReply(conversation, action.reply);
+      const selected = resolveInStockProducts(catalog, action.retailerIds);
+      if (!selected) {
+        action = degradeAction(action);
+      } else if (conversation.isTest) {
+        await persistTestOutbound(conversation, catalogProductsText(selected, conversation.channel, action.reply));
         return leido;
-      } catch (err) {
-        console.warn(`[agente] no se pudieron enviar productos: ${err instanceof Error ? err.message : "error"}`);
-        await deliverReply(conversation, "No pude compartir esos productos ahora. Puedo confirmar su disponibilidad con el equipo.");
+      } else {
+        if (conversation.channel === "whatsapp") {
+          let nativeSent = false;
+          try {
+            await sendCatalogProducts({
+              conversationId,
+              organizationId,
+              retailerIds: action.retailerIds,
+              aiGenerated: true,
+            });
+            nativeSent = true;
+          } catch (err) {
+            console.warn(`[agente] tarjeta nativa no disponible; se usará texto: ${err instanceof Error ? err.message : "error"}`);
+          }
+          if (nativeSent) {
+            if (action.reply) await deliverReply(conversation, action.reply);
+            return leido;
+          }
+        }
+
+        const productText = catalogProductsText(selected, conversation.channel, action.reply);
+        try {
+          await deliverReply(conversation, productText);
+        } catch (err) {
+          console.error(`[agente] no se pudo enviar la ficha de productos: ${err instanceof Error ? err.message : "error"}`);
+          return leido;
+        }
+        if (conversation.channel === "whatsapp") {
+          for (const product of selected) {
+            if (!product.imageUrl) continue;
+            try {
+              await sendCatalogImage({
+                conversationId,
+                organizationId,
+                imageUrl: product.imageUrl,
+                caption: product.name,
+                aiGenerated: true,
+              });
+            } catch (err) {
+              console.warn(`[agente] no se pudo adjuntar imagen del producto ${product.retailerId}: ${err instanceof Error ? err.message : "error"}`);
+            }
+          }
+        }
         return leido;
       }
     }

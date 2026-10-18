@@ -21,11 +21,13 @@
 
 ## Fase 3 — Acción de producto
 
-- El esquema habilita `send_products` solo si hay snapshot fresco y el canal es
-  WhatsApp.
+- El esquema habilita `send_products` en cualquier canal si hay snapshot
+  fresco; el prompt describe el uso solo cuando la flag está encendida.
 - El servidor vuelve a resolver todos los IDs contra la copia vigente y
   construye `catalog_id` en servidor.
 - 1 elemento: mensaje `product`; 2–30: `interactive.product_list`.
+- Si falla el transporte nativo, WhatsApp recibe texto e imágenes externas del
+  catálogo; otros canales reciben ficha textual con enlaces disponibles.
 - Reutilizar `prepareSend`, `callGraphSend` y persistencia existentes.
 
 ## Verificación

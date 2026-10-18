@@ -3,7 +3,7 @@ import { agentActionSchema, agentActionSchemaFor } from "@/server/ai/actions";
 import { buildAgentSystemPrompt } from "@/server/ai/prompts";
 import { parseCatalogFlag } from "@/server/catalog/flag";
 import { resolveInStockProducts, type CatalogSnapshot } from "@/server/catalog/service";
-import { catalogContextForTurn } from "@/server/catalog/context";
+import { catalogContextForTurn, catalogProductsText } from "@/server/catalog/context";
 
 const product = {
   id: "p1",
@@ -63,6 +63,31 @@ describe("catálogo Meta del agente (031)", () => {
     expect(prompt).toContain("no inventes propiedades, precios o disponibilidad");
   });
 
+  it("no menciona el catálogo en absoluto cuando la flag está apagada", () => {
+    const prompt = buildAgentSystemPrompt({
+      profile,
+      kb: [],
+      stages: [],
+      catalogEnabled: false,
+      channel: "whatsapp",
+    });
+    expect(prompt.toLocaleLowerCase()).not.toContain("catálogo");
+    expect(prompt).not.toContain("send_products");
+  });
+
+  it("describe la función activa aunque aún no exista un snapshot fresco", () => {
+    const prompt = buildAgentSystemPrompt({
+      profile,
+      kb: [],
+      stages: [],
+      catalogEnabled: true,
+      channel: "tiktok",
+    });
+    expect(prompt).toContain("Función de productos activa para TikTok");
+    expect(prompt).toContain("No hay snapshot fresco");
+    expect(prompt).not.toContain("send_products");
+  });
+
   it("recupera productos relevantes sin inyectar agotados ni todo un catálogo grande", () => {
     const many = Array.from({ length: 40 }, (_, index) => ({
       ...product,
@@ -80,5 +105,19 @@ describe("catálogo Meta del agente (031)", () => {
     expect(resolveInStockProducts(catalog, ["SKU-01", "SKU-01"])).toHaveLength(1);
     expect(resolveInStockProducts(catalog, ["NO-EXISTE"])).toBeNull();
     expect(resolveInStockProducts({ ...catalog, products: [{ ...product, availability: "out of stock" }] }, ["SKU-01"])).toBeNull();
+  });
+
+  it("construye ficha de texto con atributos e imagen en canales sin tarjeta nativa", () => {
+    const message = catalogProductsText(
+      [{ ...product, imageUrl: "https://cdn.example.com/olla.jpg", url: "https://tienda.example.com/olla" }],
+      "tiktok",
+      "Mira esta opción"
+    );
+    expect(message).toContain("Mira esta opción");
+    expect(message).toContain("Bolso de cuero");
+    expect(message).toContain("Precio: 120000 COP");
+    expect(message).toContain("material: cuero");
+    expect(message).toContain("Imagen: https://cdn.example.com/olla.jpg");
+    expect(message).toContain("Ver producto: https://tienda.example.com/olla");
   });
 });

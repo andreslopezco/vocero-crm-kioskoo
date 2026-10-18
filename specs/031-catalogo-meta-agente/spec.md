@@ -9,9 +9,9 @@
 
 Permitir que el agente incluido responda con datos verificables del catálogo
 Meta vinculado a la WABA del número conectado y, cuando sea pertinente, envíe
-productos por los formatos nativos de WhatsApp. La fuente de catálogo es Meta;
-no se permite elegir un catálogo arbitrario ni convertir el CRM en un editor de
-inventario.
+productos por formatos nativos de WhatsApp o como fichas de texto en otros
+canales. La fuente de catálogo es Meta; no se permite elegir un catálogo
+arbitrario ni convertir el CRM en un editor de inventario.
 
 ## Decisiones
 
@@ -42,9 +42,12 @@ inventario.
   el servidor resuelve la lista contra el snapshot completo y el `catalog_id`
   vinculado.
 - **Envío nativo**: exactamente 1 producto envía `type=product`; 2–30 envían
-  `type=interactive`, `interactive.type=product_list`. Solo WhatsApp y dentro
-  de la ventana vigente. El Laboratorio persiste una simulación y jamás llama
-  Meta. No se crea reserva, carrito ni orden.
+  `type=interactive`, `interactive.type=product_list`. Se intenta solo por
+  WhatsApp y dentro de la ventana vigente. Si Meta rechaza el formato, el agente
+  envía texto con los datos verificados y adjunta las imágenes HTTPS disponibles.
+  Otros canales (incluido TikTok) reciben una ficha de texto con enlace a la
+  imagen y al producto cuando estén disponibles. El Laboratorio persiste una
+  simulación y jamás llama Meta. No se crea reserva, carrito ni orden.
 - **Compatibilidad**: no se cambian `/api/bot/*` ni despacho 021/025; `/api/health`
   gana el campo aditivo `features.catalogo` para reflejar la bandera. El módulo
   aplica al agente incluido. Fallos de catálogo no detienen turnos ni alteran
@@ -68,6 +71,12 @@ inventario.
 
 - El prompt recibe productos en stock del snapshot vigente, con datos de Meta
   explícitamente delimitados como fuente de datos y no como instrucciones.
+- Con la flag apagada, el prompt no contiene menciones ni acciones del catálogo.
+  Con la flag encendida, la función y sus límites se describen incluso si aún
+  no existe un snapshot fresco.
+- La acción de producto funciona para cualquier canal cuando existe snapshot;
+  tarjeta nativa e imágenes adjuntas son capacidades exclusivas de WhatsApp.
+  Otros canales responden con texto de producto y URL de imagen.
 - El agente no inventa campos ausentes, precios o stock. Productos fuera de
   stock nunca se ofrecen como disponibles.
 - Snapshot ausente/caducado y fallo de Meta hacen que el agente no recomiende
@@ -75,15 +84,18 @@ inventario.
 
 ### C. Enviar formato nativo (P1)
 
-- Una selección válida envía producto individual; dos o más hasta 30 envían
-  lista nativa. Ningún ID/catálogo elegido libremente por el modelo llega a
-  Graph sin validación de servidor.
-- Ventana cerrada, canal distinto de WhatsApp, ID desconocido, producto fuera
-  de stock, módulo apagado o snapshot caducado impiden el envío sin invocar Meta.
+- Una selección válida intenta enviar producto individual; dos o más hasta 30
+  intentan lista nativa. Ningún ID/catálogo elegido libremente por el modelo
+  llega a Graph sin validación de servidor.
+- Si el formato nativo falla en WhatsApp, se entrega ficha de texto y se intentan
+  las imágenes del catálogo. Fuera de WhatsApp nunca se intenta tarjeta; se usa
+  texto con los datos disponibles.
+- Ventana cerrada, ID desconocido, producto fuera de stock, módulo apagado o
+  snapshot caducado impiden presentar productos como disponibles.
 - La conversación guarda un registro legible de lo enviado y conserva el
   `wamid`; errores de Meta siguen el tratamiento existente de auth/transitorios.
-- Sin flag y para cualquier conversación no-WhatsApp, los flujos originales
-  permanecen sin cambios.
+- Sin flag, los flujos originales permanecen sin cambios y el prompt no revela
+  la existencia de esta función.
 
 ## Fuera de alcance
 

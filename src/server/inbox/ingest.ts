@@ -561,6 +561,14 @@ export function serializeMessage(
           fileSize: media.fileSize,
           caption: media.caption,
           fetchStatus: media.fetchStatus,
+          externalUrl:
+            media.payload &&
+            typeof media.payload === "object" &&
+            !Array.isArray(media.payload) &&
+            "externalUrl" in media.payload &&
+            typeof media.payload.externalUrl === "string"
+              ? media.payload.externalUrl
+              : undefined,
           payload: media.payload,
         }
       : null,
