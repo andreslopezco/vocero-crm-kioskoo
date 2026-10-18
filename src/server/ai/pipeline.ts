@@ -9,12 +9,12 @@ import { isAiConfiguredFor } from "@/lib/ai/provider";
 import { publish } from "@/server/events/bus";
 import { isWindowOpen } from "@/server/inbox/window";
 import { windowMsFor } from "@/server/channels/capabilities";
-import { SendError, sendText } from "@/server/inbox/send";
+import { SendError, sendCatalogProducts, sendText } from "@/server/inbox/send";
 import {
-  agentActionSchema,
   degradeAction,
   resolveStage,
   type AgentActionType,
+  agentActionSchemaFor,
 } from "@/server/ai/actions";
 import { HANDOFF_BACKUP_ACK, matchesHandoffIntent } from "@/server/ai/handoff";
 import {
@@ -30,6 +30,9 @@ import {
 import { agendaEnabled } from "@/server/agenda/flag";
 import { bookSlot, offerSlots } from "@/server/agenda/agent";
 import { getOffers, mapaDeHuecosParaModelo } from "@/server/agenda/offers";
+import { catalogEnabled } from "@/server/catalog/flag";
+import { getCatalogSnapshot, getFreshCatalog, isCatalogFresh, resolveInStockProducts } from "@/server/catalog/service";
+import { catalogContextForTurn } from "@/server/catalog/context";
 
 /**
  * Turno del agente (FR-021..FR-025).
@@ -248,6 +251,12 @@ export async function runAgentTurn(
     .orderBy(asc(schema.pipelineStage.position));
 
   const agenda = agendaEnabled();
+  const catalog = catalogEnabled() && conversation.channel === "whatsapp"
+    ? conversation.isTest
+      ? await getCatalogSnapshot(organizationId).then((snapshot) => isCatalogFresh(snapshot) ? snapshot : null)
+      : await getFreshCatalog(organizationId)
+    : null;
+  const catalogContext = catalog ? catalogContextForTurn(catalog, lastInbound.text ?? "") : null;
 
   /**
    * 015 — Los huecos vigentes, con su instante exacto.
@@ -275,7 +284,7 @@ export async function runAgentTurn(
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: buildAgentSystemPrompt({ profile, kb, stages, agenda }),
+      content: buildAgentSystemPrompt({ profile, kb, stages, agenda, catalog: catalogContext }),
     },
     ...history
       .filter((m) => m.text)
@@ -294,7 +303,7 @@ export async function runAgentTurn(
     { role: "system", content: TURN_FORMAT_REMINDER },
   ];
 
-  const result = await chatJson(agentActionSchema(agenda), messages, {
+  const result = await chatJson(agentActionSchemaFor(agenda, Boolean(catalog)), messages, {
     organizationId,
   });
   if (!result.ok) {
@@ -306,6 +315,35 @@ export async function runAgentTurn(
   }
 
   let action: AgentActionType = result.data;
+
+  if (action.action === "send_products") {
+    if (!catalog || conversation.channel !== "whatsapp") {
+      action = degradeAction(action);
+    } else {
+      try {
+        if (conversation.isTest) {
+          const selected = resolveInStockProducts(catalog, action.retailerIds);
+          if (!selected) {
+            throw new Error("El producto no está disponible en el snapshot del catálogo");
+          }
+          await persistTestOutbound(conversation, `Vista previa de producto: ${selected.map((p) => `${p.name}${p.price ? ` — ${p.price}` : ""}`).join("; ")}`);
+        } else {
+          await sendCatalogProducts({
+            conversationId,
+            organizationId,
+            retailerIds: action.retailerIds,
+            aiGenerated: true,
+          });
+        }
+        if (action.reply) await deliverReply(conversation, action.reply);
+        return leido;
+      } catch (err) {
+        console.warn(`[agente] no se pudieron enviar productos: ${err instanceof Error ? err.message : "error"}`);
+        await deliverReply(conversation, "No pude compartir esos productos ahora. Puedo confirmar su disponibilidad con el equipo.");
+        return leido;
+      }
+    }
+  }
 
   // 015 — Agenda. Un fallo del motor degrada el turno (el agente responde sin
   // agendar), nunca lo tumba: quedarse callado es peor que no agendar.

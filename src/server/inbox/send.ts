@@ -32,6 +32,8 @@ import {
   type TiktokCredentials,
 } from "@/server/tiktok/credentials";
 import { sendTiktokText } from "@/server/tiktok/send";
+import { getFreshCatalog, resolveInStockProducts } from "@/server/catalog/service";
+import { catalogEnabled } from "@/server/catalog/flag";
 import {
   cabeOtroMensaje,
   salientesDesdeElUltimoEntrante,
@@ -459,6 +461,70 @@ export async function sendText(input: {
     origin: input.aiGenerated ? "ai" : "operator",
   });
 
+  return { messageId };
+}
+
+/** 031 — Valida el snapshot reciente y envía producto/lista nativa de Meta. */
+export async function sendCatalogProducts(input: {
+  conversationId: string;
+  organizationId: string;
+  retailerIds: string[];
+  aiGenerated?: boolean;
+}): Promise<SendResult> {
+  if (!catalogEnabled()) {
+    throw new SendError("meta_error", "El módulo de catálogo está desactivado");
+  }
+  if (!input.retailerIds.length || input.retailerIds.length > 30) {
+    throw new SendError("meta_error", "Selecciona entre 1 y 30 productos");
+  }
+  const target = await prepareSend(
+    input.conversationId,
+    input.organizationId,
+    input.aiGenerated ?? false
+  );
+  if (target.conversation.channel !== "whatsapp" || !target.credentials) {
+    throw new SendError("meta_error", "Los productos nativos solo se pueden enviar por WhatsApp");
+  }
+  const snapshot = await getFreshCatalog(input.organizationId);
+  if (!snapshot) {
+    throw new SendError("meta_unavailable", "El catálogo no está actualizado; no se enviaron productos");
+  }
+  const products = resolveInStockProducts(snapshot, input.retailerIds);
+  if (!products) {
+    throw new SendError("meta_error", "Uno de los productos ya no está disponible en el catálogo");
+  }
+  const text = products.map((product) => `${product.name}${product.price ? ` — ${product.price}` : ""}`).join("\n");
+  const payload = products.length === 1
+    ? {
+        messaging_product: "whatsapp",
+        ...target.destinatario,
+        type: "product",
+        product: { catalog_id: snapshot.catalogId, product_retailer_id: products[0]!.retailerId },
+      }
+    : {
+        messaging_product: "whatsapp",
+        ...target.destinatario,
+        type: "interactive",
+        interactive: {
+          type: "product_list",
+          body: { text: "Productos disponibles" },
+          action: {
+            catalog_id: snapshot.catalogId,
+            sections: [{ title: "Productos", product_items: products.map((product) => ({ product_retailer_id: product.retailerId })) }],
+          },
+        },
+      };
+  const waMessageId = await callGraphSend(target.credentials, payload);
+  const messageId = await persistOutbound({
+    organizationId: input.organizationId,
+    conversationId: input.conversationId,
+    waMessageId,
+    type: products.length === 1 ? "product" : "product_list",
+    text,
+    status: "pending",
+    aiGenerated: input.aiGenerated,
+    origin: input.aiGenerated ? "ai" : "operator",
+  });
   return { messageId };
 }
 

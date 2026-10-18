@@ -47,16 +47,30 @@ const agendaActions = [
   }),
 ] as const;
 
+const catalogActions = [
+  z.object({
+    action: z.literal("send_products"),
+    retailerIds: z.array(z.string().trim().min(1)).min(1).max(30),
+    reply: z.string().optional(),
+  }),
+] as const;
+
 export const AgentAction = z.discriminatedUnion("action", [
   ...baseActions,
   ...agendaActions,
+  ...catalogActions,
 ]);
 
 /** El esquema que se le exige al modelo en ESTE turno. */
 export function agentActionSchema(agenda: boolean) {
-  return agenda
-    ? AgentAction
-    : z.discriminatedUnion("action", [...baseActions]);
+  return agentActionSchemaFor(agenda, false);
+}
+
+export function agentActionSchemaFor(agenda: boolean, catalog: boolean) {
+  if (agenda && catalog) return AgentAction;
+  if (agenda) return z.discriminatedUnion("action", [...baseActions, ...agendaActions]);
+  if (catalog) return z.discriminatedUnion("action", [...baseActions, ...catalogActions]);
+  return z.discriminatedUnion("action", [...baseActions]);
 }
 
 export type AgentActionType = z.infer<typeof AgentAction>;
@@ -85,6 +99,9 @@ export function degradeAction(action: AgentActionType): AgentActionType {
     return action.reply
       ? { action: "reply", text: action.reply }
       : { action: "none" };
+  }
+  if (action.action === "send_products") {
+    return action.reply ? { action: "reply", text: action.reply } : { action: "none" };
   }
   return action;
 }

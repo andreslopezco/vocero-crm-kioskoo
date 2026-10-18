@@ -43,7 +43,7 @@ type WebhookRegistration =
  */
 type LastRegistration = { result: WebhookRegistration; from: "save" | "button" };
 
-export function WhatsappWizard() {
+export function WhatsappWizard({ catalogEnabled = false }: { catalogEnabled?: boolean }) {
   const [connection, setConnection] = useState<Connection | null>(null);
   const [webhook, setWebhook] = useState<WebhookInfo | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -133,7 +133,56 @@ export function WhatsappWizard() {
           }
         />
       )}
+      {catalogEnabled && <CatalogCard connected={connection?.status === "connected"} />}
     </div>
+  );
+}
+
+type CatalogState = { catalogId: string; name: string | null; syncedAt: string; productCount: number; inStockCount: number };
+
+function CatalogCard({ connected }: { connected: boolean }) {
+  const [catalog, setCatalog] = useState<CatalogState | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    const response = await fetch("/api/settings/catalog").catch(() => null);
+    const data = response?.ok ? await response.json() : null;
+    setCatalog(data?.catalog ?? null);
+    setLoading(false);
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+  async function sync() {
+    setSyncing(true);
+    setError(null);
+    const response = await fetch("/api/settings/catalog", { method: "POST" }).catch(() => null);
+    const data = await response?.json().catch(() => null);
+    if (response?.ok) setCatalog(data.catalog);
+    else setError(data?.error?.message ?? "No se pudo sincronizar el catálogo.");
+    setSyncing(false);
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Catálogo de Meta</CardTitle>
+        <CardDescription>El agente consulta el catálogo vinculado a esta WABA y puede compartir productos en WhatsApp. El token conectado debe tener acceso de lectura al catálogo de Meta.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {loading ? <p className="text-sm text-muted-foreground">Cargando catálogo…</p> : catalog ? (
+          <div className="text-sm">
+            <p className="font-medium">{catalog.name ?? `Catálogo ${catalog.catalogId}`}</p>
+            <p className="text-muted-foreground">{catalog.inStockCount} disponibles según Meta de {catalog.productCount} productos · sincronizado {new Date(catalog.syncedAt).toLocaleString()}</p>
+          </div>
+        ) : <p className="text-sm text-muted-foreground">Aún no se ha sincronizado. Se detectará el catálogo vinculado al número.</p>}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" disabled={!connected || syncing} onClick={() => void sync()}>
+            {syncing ? "Sincronizando…" : "Sincronizar ahora"}
+          </Button>
+          <span className="text-xs text-muted-foreground">La disponibilidad refleja el último estado publicado en Meta; no reserva inventario.</span>
+        </div>
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      </CardContent>
+    </Card>
   );
 }
 

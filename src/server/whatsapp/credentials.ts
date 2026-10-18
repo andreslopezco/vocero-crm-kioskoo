@@ -82,23 +82,16 @@ export async function saveCredentials(input: {
 }): Promise<void> {
   const db = getDb();
   const enc = encryptSecret(input.token);
-  await db
-    .insert(schema.metaCredentials)
-    .values({
-      id: newId("credentials"),
-      organizationId: input.organizationId,
-      wabaId: input.wabaId,
-      phoneNumberId: input.phoneNumberId,
-      displayPhoneNumber: input.displayPhoneNumber ?? null,
-      verifiedName: input.verifiedName ?? null,
-      tokenCipher: enc.cipher,
-      tokenIv: enc.iv,
-      tokenTag: enc.tag,
-      status: "connected",
-    })
-    .onConflictDoUpdate({
-      target: [schema.metaCredentials.organizationId],
-      set: {
+  await db.transaction(async (tx) => {
+    const previous = await tx.select({ wabaId: schema.metaCredentials.wabaId })
+      .from(schema.metaCredentials)
+      .where(scoped(schema.metaCredentials.organizationId, input.organizationId))
+      .limit(1);
+    await tx
+      .insert(schema.metaCredentials)
+      .values({
+        id: newId("credentials"),
+        organizationId: input.organizationId,
         wabaId: input.wabaId,
         phoneNumberId: input.phoneNumberId,
         displayPhoneNumber: input.displayPhoneNumber ?? null,
@@ -107,9 +100,28 @@ export async function saveCredentials(input: {
         tokenIv: enc.iv,
         tokenTag: enc.tag,
         status: "connected",
-        updatedAt: new Date(),
-      },
-    });
+      })
+      .onConflictDoUpdate({
+        target: [schema.metaCredentials.organizationId],
+        set: {
+          wabaId: input.wabaId,
+          phoneNumberId: input.phoneNumberId,
+          displayPhoneNumber: input.displayPhoneNumber ?? null,
+          verifiedName: input.verifiedName ?? null,
+          tokenCipher: enc.cipher,
+          tokenIv: enc.iv,
+          tokenTag: enc.tag,
+          status: "connected",
+          updatedAt: new Date(),
+        },
+      });
+    if (previous[0] && previous[0].wabaId !== input.wabaId) {
+      await tx.delete(schema.metaCatalogProduct)
+        .where(scoped(schema.metaCatalogProduct.organizationId, input.organizationId));
+      await tx.delete(schema.metaCatalog)
+        .where(scoped(schema.metaCatalog.organizationId, input.organizationId));
+    }
+  });
 }
 
 /**
@@ -120,9 +132,14 @@ export async function saveCredentials(input: {
  */
 export async function desconectarCanal(organizationId: string): Promise<void> {
   const db = getDb();
-  await db
-    .delete(schema.metaCredentials)
-    .where(scoped(schema.metaCredentials.organizationId, organizationId));
+  await db.transaction(async (tx) => {
+    await tx.delete(schema.metaCatalogProduct)
+      .where(scoped(schema.metaCatalogProduct.organizationId, organizationId));
+    await tx.delete(schema.metaCatalog)
+      .where(scoped(schema.metaCatalog.organizationId, organizationId));
+    await tx.delete(schema.metaCredentials)
+      .where(scoped(schema.metaCredentials.organizationId, organizationId));
+  });
 }
 
 /** Marca la conexión como vencida (token inválido detectado en runtime). */

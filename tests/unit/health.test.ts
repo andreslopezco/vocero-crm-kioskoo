@@ -45,26 +45,29 @@ afterEach(async () => {
 });
 
 describe("features: las banderas de despliegue", () => {
-  it("sin banderas: solo WhatsApp, agenda y atribución apagadas", () => {
+  it("sin banderas: solo WhatsApp; módulos opcionales apagados", () => {
     expect(healthFeatures({})).toEqual({
       agenda: false,
       channels: ["whatsapp"],
       atribucion: false,
+      catalogo: false,
     });
   });
 
-  it("con las tres encendidas, los canales van en el orden del catálogo", () => {
+  it("con las banderas encendidas, los canales van en el orden del catálogo", () => {
     // El de la variable no: dos instancias iguales tienen que responder igual.
     expect(
       healthFeatures({
         AGENDA: "on",
         CHANNELS: "messenger, Instagram",
         ATRIBUCION: "1",
+        KIOSKOO_CATALOGO: "on",
       })
     ).toEqual({
       agenda: true,
       channels: ["whatsapp", "instagram", "messenger"],
       atribucion: true,
+      catalogo: true,
     });
   });
 
@@ -72,8 +75,8 @@ describe("features: las banderas de despliegue", () => {
     // Mismos parsers que usan las rutas para responder 404: si aquí dijera
     // `true` y la agenda respondiera 404, el health mentiría.
     expect(
-      healthFeatures({ AGENDA: "onn", CHANNELS: "telegram", ATRIBUCION: "off" })
-    ).toEqual({ agenda: false, channels: ["whatsapp"], atribucion: false });
+      healthFeatures({ AGENDA: "onn", CHANNELS: "telegram", ATRIBUCION: "off", KIOSKOO_CATALOGO: "off" })
+    ).toEqual({ agenda: false, channels: ["whatsapp"], atribucion: false, catalogo: false });
   });
 });
 
@@ -133,13 +136,14 @@ describe("GET /api/health", () => {
     process.env.AGENDA = "on";
     process.env.CHANNELS = "instagram";
     delete process.env.ATRIBUCION;
+    delete process.env.KIOSKOO_CATALOGO;
 
     const res = await GET();
     expect(res.status).toBe(200);
     const cuerpo = await res.json();
     expect(cuerpo).toMatchObject({
       ok: true,
-      features: { agenda: true, channels: ["whatsapp", "instagram"], atribucion: false },
+      features: { agenda: true, channels: ["whatsapp", "instagram"], atribucion: false, catalogo: false },
       mediaWritable: true,
     });
     expect(typeof cuerpo.version).toBe("string");
