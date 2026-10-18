@@ -136,7 +136,14 @@ export function CatalogPage() {
 
             {filtered.length ? (
               <div className="overflow-x-auto rounded-lg border bg-card">
-                <table aria-label="Productos sincronizados del catálogo" className="w-full min-w-[760px] text-sm">
+                <table aria-label="Productos sincronizados del catálogo" className="w-full min-w-[760px] table-fixed text-sm">
+                  <colgroup>
+                    <col className="w-[30%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[20%]" />
+                    <col className="w-[23%]" />
+                  </colgroup>
                   <thead className="kicker border-b bg-subtle text-left">
                     <tr>
                       <th scope="col" className="px-3 py-2.5 font-medium sm:px-4">Producto</th>
@@ -150,13 +157,13 @@ export function CatalogPage() {
                     {filtered.map((product) => {
                       const attributes = Object.entries(product.attributes).filter(([, value]) => value != null && showValue(value) !== "");
                       return <tr key={product.retailerId} className="border-t align-middle first:border-t-0">
-                        <td className="px-3 py-3 sm:px-4">
-                          <div className="flex min-w-56 items-center gap-3">
+                        <td className="min-w-0 px-3 py-3 sm:px-4">
+                          <div className="flex min-w-0 items-center gap-2.5">
                             <ProductImage src={product.imageUrl} alt={`Imagen de ${product.name}`} />
                             <div className="min-w-0">
-                              <p className="truncate font-medium" title={product.name}>{product.name}</p>
-                              <p className="truncate text-xs text-muted-foreground" title={product.description ?? product.retailerId}>
-                                {product.description ?? `ID: ${product.retailerId}`}
+                              <p className="line-clamp-2 font-medium leading-5" title={product.name}>{product.name}</p>
+                              <p className="line-clamp-2 text-xs leading-4 text-muted-foreground" title={product.description ?? product.retailerId}>
+                                {product.description ? `Descripción: ${product.description}` : `ID: ${product.retailerId}`}
                               </p>
                             </div>
                           </div>
@@ -171,11 +178,11 @@ export function CatalogPage() {
                           </Badge>
                         </td>
                         <td className="px-3 py-3">
-                          {attributes.length > 0 || product.url ? <details className="max-w-64">
-                            <summary className="cursor-pointer whitespace-nowrap text-xs font-semibold text-brand">Ver detalles</summary>
-                            <div className="mt-2 max-h-72 w-72 max-w-full overflow-y-auto rounded-lg border bg-subtle p-3 text-xs">
+                          {attributes.length > 0 || product.url ? <details className="max-w-full">
+                            <summary className="cursor-pointer truncate text-xs font-semibold text-brand">Ver detalles</summary>
+                            <div className="mt-2 max-h-72 w-64 max-w-full overflow-y-auto rounded-lg border bg-subtle p-3 text-xs">
                               <p className="mb-2 font-semibold">ID: {product.retailerId}</p>
-                              {product.description && <p className="mb-3 whitespace-pre-wrap text-text-2">{product.description}</p>}
+                              {product.description && <p className="mb-3 line-clamp-2 whitespace-pre-wrap text-text-2" title={product.description}>Descripción: {product.description}</p>}
                               {attributes.length > 0 && <dl className="space-y-2">
                                 {attributes.map(([key, value]) => <div key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-2 border-t pt-1.5">
                                   <dt className="break-words text-muted-foreground">{key.replaceAll("_", " ")}</dt>
