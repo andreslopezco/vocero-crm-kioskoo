@@ -4,7 +4,7 @@ import { CatalogError, getCatalogSnapshot, syncCatalog } from "@/server/catalog/
 
 export const dynamic = "force-dynamic";
 
-export const GET = withAuth(async (session) => {
+export const GET = withAuth(async (session, req: Request) => {
   if (!catalogEnabled()) return catalogDisabledResponse();
   const snapshot = await getCatalogSnapshot(session.organizationId);
   return Response.json({
@@ -14,6 +14,9 @@ export const GET = withAuth(async (session) => {
       syncedAt: snapshot.syncedAt.toISOString(),
       productCount: snapshot.products.length,
       inStockCount: snapshot.products.filter((p) => p.availability === "in stock").length,
+      ...(new URL(req.url).searchParams.get("products") === "1" ? { products: snapshot.products.map(({ retailerId, name, description, availability, price, currency, brand, imageUrl, url, attributes }) => ({
+        retailerId, name, description, availability, price, currency, brand, imageUrl, url, attributes,
+      })) } : {}),
     } : null,
   });
 });

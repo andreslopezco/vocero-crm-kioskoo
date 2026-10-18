@@ -5,6 +5,7 @@
 - [x] Añadir flag opt-in y endpoints de consulta/sincronización.
 - [x] Paginar Meta, validar registros básicos y guardar snapshot atómico.
 - [x] Mostrar catálogo y sincronización en Ajustes → WhatsApp.
+- [x] Añadir página de consulta del snapshot en el menú, con búsqueda y atributos publicados.
 - [x] Enriquecer el contexto del agente y agregar acción validada de producto.
 - [x] Enviar producto/lista con el transporte de WhatsApp existente.
 - [x] Evitar llamadas Meta desde el Laboratorio.

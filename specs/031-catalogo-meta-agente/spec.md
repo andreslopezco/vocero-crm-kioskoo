@@ -55,6 +55,7 @@ inventario.
 ### A. Vincular y consultar el catálogo (P1)
 
 - La pantalla de WhatsApp muestra el catálogo vinculado solo con módulo activo.
+- El menú principal muestra una página «Catálogo» solo con módulo activo; permite consultar el snapshot sincronizado, buscar productos y revisar sus atributos sin editar ni publicar el inventario.
 - Sin catálogo o sin permisos, se informa el motivo sin desconectar WhatsApp.
 - Sincronizar trae productos paginados desde Meta; errores y paginación
   incompleta nunca reemplazan el snapshot vigente.

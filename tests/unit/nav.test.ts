@@ -37,6 +37,14 @@ describe("barra lateral agrupada", () => {
     expect(trabajo!.items.at(-1)!.href).toBe("/bookings");
   });
 
+  it("CATALOGO añade Catálogo al grupo Agente solo cuando está habilitado", () => {
+    expect(appNavGroups({ role: "owner" })[1]!.items.map((i) => i.href)).not.toContain("/catalog");
+    expect(appNavGroups({ catalogo: true, role: "owner" })[1]!.items.at(-1)).toMatchObject({
+      href: "/catalog",
+      label: "Catálogo",
+    });
+  });
+
   it("la guía de inicio abre el grupo Agente solo para quien configura", () => {
     for (const role of ["owner", "admin"]) {
       const agente = appNavGroups({ role })[1]!;
