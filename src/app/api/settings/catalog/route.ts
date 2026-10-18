@@ -14,10 +14,12 @@ export const GET = withAuth(async (session, req: Request) => {
       syncedAt: snapshot.syncedAt.toISOString(),
       productCount: snapshot.products.length,
       inStockCount: snapshot.products.filter((p) => p.availability === "in stock").length,
-      ...(new URL(req.url).searchParams.get("products") === "1" ? { products: snapshot.products.map(({ retailerId, name, description, availability, price, currency, brand, imageUrl, url, attributes }) => ({
-        retailerId, name, description, availability, price, currency, brand, imageUrl, url, attributes,
-      })) } : {}),
     } : null,
+    ...(snapshot && new URL(req.url).searchParams.get("products") === "1" ? {
+      products: snapshot.products.map(({ retailerId, name, description, availability, price, currency, brand, imageUrl, url, attributes }) => ({
+        retailerId, name, description, availability, price, currency, brand, imageUrl, url, attributes,
+      })),
+    } : {}),
   });
 });
 
