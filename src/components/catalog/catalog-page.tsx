@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, PackageSearch, RefreshCw, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 
 type Product = {
@@ -79,62 +79,94 @@ export function CatalogPage() {
     ].some((value) => value?.toLocaleLowerCase().includes(needle)));
   }, [products, query]);
 
-  if (!loaded) return <p className="p-6 text-sm text-muted-foreground">Cargando catálogo…</p>;
+  if (!loaded) return <p className="p-4 text-sm text-muted-foreground sm:p-6">Cargando catálogo…</p>;
 
   return (
-    <div className="h-full overflow-y-auto p-4 sm:p-6">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-brand"><PackageSearch className="h-5 w-5" aria-hidden /><span className="kicker">WhatsApp · Meta</span></div>
-            <h1 className="text-2xl font-bold tracking-tight">Catálogo</h1>
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Productos sincronizados desde el catálogo vinculado al número de WhatsApp. Aquí puedes revisar los datos que usa el agente para recomendar productos.</p>
-          </div>
-          <Button variant="outline" disabled={syncing} onClick={() => void sync()}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
-            {syncing ? "Sincronizando…" : "Sincronizar ahora"}
+    <div className="flex h-full flex-col">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-6 sm:py-4">
+        <div className="min-w-0">
+          <h2 className="text-[17px] font-bold tracking-tight">Catálogo</h2>
+          <p className="text-xs text-text-3">Productos del catálogo de Meta vinculado a WhatsApp.</p>
+        </div>
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
+          {catalog && <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full pl-8" placeholder="Buscar producto…" aria-label="Buscar productos" />
+          </div>}
+          <Button size="sm" variant="secondary" disabled={syncing} onClick={() => void sync()}>
+            <RefreshCw className={`mr-1.5 h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Sincronizando…" : "Sincronizar"}
           </Button>
-        </header>
+        </div>
+      </header>
 
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 sm:p-6">
         {error && <div role="alert" className="flex items-start gap-2 rounded-lg border border-danger-soft bg-danger-tint p-3 text-sm text-danger-text"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{error}</div>}
 
         {catalog ? (
           <>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle>{catalog.name ?? `Catálogo ${catalog.catalogId}`}</CardTitle>
-                <CardDescription>{catalog.inStockCount} disponibles según Meta · {catalog.productCount} productos en total · sincronizado {new Date(catalog.syncedAt).toLocaleString()}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="relative max-w-md"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} className="pl-9" placeholder="Buscar por nombre, marca, material…" aria-label="Buscar productos" /></div>
-                <p className="text-xs text-muted-foreground">La disponibilidad refleja el último estado publicado en Meta; no reserva inventario.</p>
-              </CardContent>
-            </Card>
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-lg border bg-subtle px-3 py-2.5 sm:px-4">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{catalog.name ?? `Catálogo ${catalog.catalogId}`}</p>
+                <p className="text-xs text-muted-foreground">
+                  {catalog.inStockCount} {catalog.inStockCount === 1 ? "producto disponible" : "productos disponibles"} · {catalog.productCount} {catalog.productCount === 1 ? "producto" : "productos"} en total
+                </p>
+              </div>
+              <p className="text-xs text-text-3">Sincronizado {new Date(catalog.syncedAt).toLocaleString()}</p>
+            </div>
 
             {filtered.length ? (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <ul className="space-y-2">
                 {filtered.map((product) => {
                   const attributes = Object.entries(product.attributes).filter(([, value]) => value != null && showValue(value) !== "");
-                  return <Card key={product.retailerId} className="overflow-hidden">
-                    {product.imageUrl && <a href={product.imageUrl} target="_blank" rel="noreferrer" className="block border-b px-5 py-2 text-xs text-brand hover:underline">Ver imagen del producto</a>}
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between gap-3"><CardTitle className="text-base">{product.name}</CardTitle><Badge variant={product.availability === "in stock" ? "success" : "secondary"}>{product.availability ?? "Disponibilidad no informada"}</Badge></div>
-                      <CardDescription>ID de producto: {product.retailerId}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3 text-sm">
-                      {product.price && <p className="text-lg font-semibold">{product.price}{product.currency ? ` ${product.currency}` : ""}</p>}
-                      {product.brand && <p><span className="text-muted-foreground">Marca:</span> {product.brand}</p>}
-                      {product.description && <p className="whitespace-pre-wrap text-muted-foreground">{product.description}</p>}
-                      {attributes.length > 0 && <details className="border-t pt-3"><summary className="cursor-pointer text-sm font-medium">Más información ({attributes.length})</summary><dl className="mt-3 space-y-2">{attributes.map(([key, value]) => <div key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-2 text-xs"><dt className="break-words text-muted-foreground">{key.replaceAll("_", " ")}</dt><dd className="break-words">{showValue(value)}</dd></div>)}</dl></details>}
-                      {product.url && <a href={product.url} target="_blank" rel="noreferrer" className="inline-block text-xs text-brand hover:underline">Abrir producto en tienda</a>}
-                    </CardContent>
-                  </Card>;
+                  return <li key={product.retailerId} className="rounded-lg border bg-card px-3 py-3 sm:px-4">
+                    <div className="flex flex-wrap items-start gap-x-3 gap-y-2 sm:flex-nowrap sm:gap-x-4">
+                      <div className="min-w-[60%] flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium">{product.name}</span>
+                          <Badge variant={product.availability === "in stock" ? "success" : "secondary"}>
+                            {product.availability === "in stock" ? "Disponible" : product.availability ?? "Disponibilidad no informada"}
+                          </Badge>
+                          {product.brand && <Badge variant="outline">{product.brand}</Badge>}
+                        </div>
+                        <p className="mt-0.5 text-xs text-muted-foreground">ID de producto: {product.retailerId}</p>
+                      </div>
+                      {product.price && <p className="shrink-0 text-sm font-semibold">{product.price}{product.currency ? ` ${product.currency}` : ""}</p>}
+                    </div>
+                    {product.description && <p className="mt-3 whitespace-pre-wrap text-sm text-text-2">{product.description}</p>}
+                    {(attributes.length > 0 || product.url || product.imageUrl) && <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t pt-2.5">
+                      {attributes.length > 0 && <details className="min-w-0 flex-1">
+                        <summary className="w-fit cursor-pointer text-xs font-semibold text-text-2">Más información ({attributes.length})</summary>
+                        <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
+                          {attributes.map(([key, value]) => <div key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-2 text-xs">
+                            <dt className="break-words text-muted-foreground">{key.replaceAll("_", " ")}</dt>
+                            <dd className="break-words">{showValue(value)}</dd>
+                          </div>)}
+                        </dl>
+                      </details>}
+                      {product.imageUrl && <a href={product.imageUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand hover:underline">Ver imagen</a>}
+                      {product.url && <a href={product.url} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand hover:underline">Abrir en tienda</a>}
+                    </div>}
+                  </li>;
                 })}
-              </div>
-            ) : <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">{products.length ? "No hay productos que coincidan con la búsqueda." : "El catálogo está sincronizado, pero no contiene productos."}</CardContent></Card>}
+              </ul>
+            ) : (
+              <EmptyState
+                icon={query ? Search : PackageSearch}
+                title={products.length ? "Sin resultados" : "El catálogo no contiene productos"}
+                description={products.length ? `No encontramos productos que coincidan con «${query.trim()}».` : "Cuando haya productos publicados en Meta, aparecerán aquí."}
+                className="min-h-48 rounded-lg border border-dashed"
+              />
+            )}
+            <p className="text-xs text-text-3">La disponibilidad refleja el último estado publicado en Meta; no reserva inventario.</p>
           </>
         ) : (
-          <Card><CardContent className="flex flex-col items-center gap-3 py-12 text-center"><PackageSearch className="h-9 w-9 text-muted-foreground" /><div><h2 className="font-semibold">Todavía no hay un catálogo sincronizado</h2><p className="mt-1 max-w-lg text-sm text-muted-foreground">Conecta WhatsApp y asegúrate de que el token tenga permiso de lectura del catálogo de Meta. Después selecciona “Sincronizar ahora”.</p></div></CardContent></Card>
+          <EmptyState
+            icon={PackageSearch}
+            title="Todavía no hay un catálogo sincronizado"
+            description="Conecta WhatsApp y asegúrate de que el token tenga permiso de lectura del catálogo de Meta. Después selecciona «Sincronizar»."
+            className="h-full min-h-64"
+          />
         )}
       </div>
     </div>
