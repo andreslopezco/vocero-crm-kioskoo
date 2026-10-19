@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Image as ImageIcon, PackageSearch, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ChevronDown, Image as ImageIcon, PackageSearch, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -120,6 +120,7 @@ export function CatalogPage() {
   const [form, setForm] = useState<ProductForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -260,49 +261,69 @@ export function CatalogPage() {
                   <tbody>
                     {filtered.map((product) => {
                       const attributes = Object.entries(product.attributes).filter(([, value]) => value != null && showValue(value) !== "");
-                      return <tr key={product.retailerId} className="border-t align-middle first:border-t-0">
-                        <td className="min-w-0 px-3 py-3 sm:px-4">
-                          <div className="flex min-w-0 items-center gap-2.5">
-                            <ProductImage src={product.imageUrl} alt={`Imagen de ${product.name}`} />
-                            <div className="min-w-0">
-                              <p className="line-clamp-2 font-medium leading-5" title={product.name}>{product.name}</p>
-                              <p className="line-clamp-2 text-xs leading-4 text-muted-foreground" title={product.description ?? product.retailerId}>
-                                {product.description ? `Descripción: ${product.description}` : `ID: ${product.retailerId}`}
-                              </p>
+                      const expanded = expandedProductId === product.retailerId;
+                      return <Fragment key={product.retailerId}>
+                        <tr className="border-t align-middle first:border-t-0">
+                          <td className="min-w-0 px-3 py-3 sm:px-4">
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <ProductImage src={product.imageUrl} alt={`Imagen de ${product.name}`} />
+                              <div className="min-w-0">
+                                <p className="line-clamp-2 font-medium leading-5" title={product.name}>{product.name}</p>
+                                <p className="line-clamp-2 text-xs leading-4 text-muted-foreground" title={product.description ?? product.retailerId}>
+                                  {product.description ? `Descripción: ${product.description}` : `ID: ${product.retailerId}`}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3">{product.brand ?? <span className="text-text-3">—</span>}</td>
-                        <td className="whitespace-nowrap px-3 py-3 font-semibold">
-                          {product.price ? `${product.price}${product.currency ? ` ${product.currency}` : ""}` : <span className="font-normal text-text-3">—</span>}
-                        </td>
-                        <td className="px-3 py-3">
-                          <Badge variant={product.availability === "in stock" ? "success" : "secondary"}>
-                            {product.availability === "in stock" ? "Disponible" : product.availability ?? "No informada"}
-                          </Badge>
-                        </td>
-                        <td className="px-3 py-3">
-                          {attributes.length > 0 || product.url ? <details className="max-w-full">
-                            <summary className="cursor-pointer truncate text-xs font-semibold text-brand">Ver detalles</summary>
-                            <div className="mt-2 max-h-72 w-64 max-w-full overflow-y-auto rounded-lg border bg-subtle p-3 text-xs">
-                              <p className="mb-2 font-semibold">ID: {product.retailerId}</p>
-                              {product.description && <p className="mb-3 line-clamp-2 whitespace-pre-wrap text-text-2" title={product.description}>Descripción: {product.description}</p>}
-                              {attributes.length > 0 && <dl className="space-y-2">
-                                {attributes.map(([key, value]) => <div key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-2 border-t pt-1.5">
-                                  <dt className="break-words text-muted-foreground">{key.replaceAll("_", " ")}</dt>
-                                  <dd className="break-words">{showValue(value)}</dd>
+                          </td>
+                          <td className="px-3 py-3">{product.brand ?? <span className="text-text-3">—</span>}</td>
+                          <td className="whitespace-nowrap px-3 py-3 font-semibold">
+                            {product.price ? `${product.price}${product.currency ? ` ${product.currency}` : ""}` : <span className="font-normal text-text-3">—</span>}
+                          </td>
+                          <td className="px-3 py-3">
+                            <Badge variant={product.availability === "in stock" ? "success" : "secondary"}>
+                              {product.availability === "in stock" ? "Disponible" : product.availability ?? "No informada"}
+                            </Badge>
+                          </td>
+                          <td className="px-3 py-3">
+                            {attributes.length > 0 || product.description || product.url ? <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              aria-expanded={expanded}
+                              aria-controls={`catalog-details-${product.retailerId}`}
+                              className="h-auto px-0 py-1 text-xs font-semibold text-brand hover:bg-transparent"
+                              onClick={() => setExpandedProductId(expanded ? null : product.retailerId)}
+                            >
+                              <ChevronDown className={`mr-1 h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
+                              {expanded ? "Ocultar detalles" : "Ver detalles"}
+                            </Button> : <span className="text-text-3">—</span>}
+                          </td>
+                          <td className="px-2 py-3 text-right">
+                            <Button size="icon" variant="ghost" aria-label={`Editar ${product.name}`} title={`Editar ${product.name}`} onClick={() => openEditor("edit", product)}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                        {expanded && <tr className="border-t bg-subtle/50">
+                          <td id={`catalog-details-${product.retailerId}`} colSpan={6} className="px-3 pb-4 pt-3 sm:px-4">
+                            <section aria-label={`Detalles de ${product.name}`} className="rounded-lg border bg-card p-4">
+                              <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
+                                <div className="min-w-0 text-xs">
+                                  <p className="font-semibold">ID: {product.retailerId}</p>
+                                  {product.description && <p className="mt-2 whitespace-pre-wrap text-text-2">Descripción: {product.description}</p>}
+                                </div>
+                                {attributes.map(([key, value]) => <div key={key} className="min-w-0 border-t pt-2 text-xs sm:border-t-0 sm:pt-0">
+                                  <p className="text-muted-foreground">{key.replaceAll("_", " ")}</p>
+                                  <p className="mt-1 break-words font-medium">{showValue(value)}</p>
                                 </div>)}
-                              </dl>}
-                              {product.url && <a href={product.url} target="_blank" rel="noreferrer" className="mt-3 inline-block font-semibold text-brand hover:underline">Abrir en tienda</a>}
-                            </div>
-                          </details> : <span className="text-text-3">—</span>}
-                        </td>
-                        <td className="px-2 py-3 text-right">
-                          <Button size="icon" variant="ghost" aria-label={`Editar ${product.name}`} title={`Editar ${product.name}`} onClick={() => openEditor("edit", product)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        </td>
-                      </tr>;
+                                {product.url && <div className="border-t pt-2 text-xs sm:border-t-0 sm:pt-0">
+                                  <a href={product.url} target="_blank" rel="noreferrer" className="font-semibold text-brand hover:underline">Abrir en tienda</a>
+                                </div>}
+                              </div>
+                            </section>
+                          </td>
+                        </tr>}
+                      </Fragment>;
                     })}
                   </tbody>
                 </table>
