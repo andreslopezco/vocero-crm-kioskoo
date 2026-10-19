@@ -30,9 +30,21 @@ Query: `hub.mode=subscribe`, `hub.verify_token`, `hub.challenge`.
     "value": {
       "metadata": { "phone_number_id": "...", "display_phone_number": "..." },
       "contacts": [{ "wa_id": "5215512345678", "profile": { "name": "..." } }],
-      "messages": [{ "id": "wamid....", "from": "5215512345678",
-                     "timestamp": "1720000000", "type": "text",
-                     "text": { "body": "..." } }],
+      "messages": [
+        { "id": "wamid-texto", "from": "<IDENTIDAD>",
+          "timestamp": "1720000000", "type": "text",
+          "text": { "body": "..." } },
+        { "id": "wamid-pedido", "from": "<IDENTIDAD>",
+          "timestamp": "1720000001", "type": "order",
+          "order": {
+            "catalog_id": "<CATALOG_ID>",
+            "product_items": [{
+              "product_retailer_id": "<SKU>", "quantity": "2",
+              "item_price": "12500", "currency": "COP"
+            }],
+            "text": "<NOTA_OPCIONAL>"
+          } }
+      ],
       "statuses": [{ "id": "wamid....", "status": "sent|delivered|read|failed",
                      "timestamp": "...", "errors": [{ "code": 131047, "title": "..." }] }]
     } }] }] }
@@ -43,8 +55,11 @@ Reglas de procesamiento:
 - Ruteo por `metadata.phone_number_id` → `meta_credentials.phone_number_id` → org. Sin
   match → `200` e ignorar.
 - `messages[]` → ingesta idempotente (`wa_message_id` UNIQUE; duplicado → no-op).
-  Tipos no-texto → mensaje con `type` correspondiente y body NULL (chip). Tipos
-  desconocidos → `unsupported`, sin error.
+  Los tipos no-texto admitidos → mensaje con su tipo correspondiente. `order` se
+  valida, guarda estructurado en `message.order_payload` y se muestra como pedido
+  con artículos; su resumen legible entra al historial del agente. Los nombres
+  se resuelven desde la copia local del catálogo si existe. El pedido recibido
+  es una solicitud y no confirma pago. Tipos desconocidos → ignorar sin error.
 - `statuses[]` → upgrade monotónico del estado (`sent<delivered<read`; nunca degradar;
   `failed` registra `error_detail`).
 - `field: "message_template_status_update"` → `value: { event: "APPROVED"|"REJECTED"|"PENDING",

@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
+import { upsertFicha, type FichaInput } from "@/server/bot/ficha";
 import { moveLeadToStage as moveLeadThroughHistory } from "@/server/leads/stage-history";
 import { getEnv } from "@/lib/env";
 import { chatJson, type ChatMessage } from "@/lib/ai";
@@ -32,7 +33,13 @@ import { bookSlot, offerSlots } from "@/server/agenda/agent";
 import { getOffers, mapaDeHuecosParaModelo } from "@/server/agenda/offers";
 import { catalogEnabled } from "@/server/catalog/flag";
 import { getCatalogSnapshot, getFreshCatalog, isCatalogFresh, resolveInStockProducts } from "@/server/catalog/service";
-import { catalogContextForTurn, catalogProductsText, stripCatalogLinks } from "@/server/catalog/context";
+import {
+  catalogCategoryGroups,
+  catalogContextForTurn,
+  catalogGuidanceForTurn,
+  catalogProductsIntro,
+  catalogProductsText,
+} from "@/server/catalog/context";
 
 /**
  * Turno del agente (FR-021..FR-025).
@@ -249,6 +256,21 @@ export async function runAgentTurn(
     .from(schema.pipelineStage)
     .where(eq(schema.pipelineStage.organizationId, organizationId))
     .orderBy(asc(schema.pipelineStage.position));
+  const contactRows = await db
+    .select({ ficha: schema.contact.ficha })
+    .from(schema.contact)
+    .where(
+      scoped(
+        schema.contact.organizationId,
+        organizationId,
+        eq(schema.contact.id, conversation.contactId)
+      )
+    )
+    .limit(1);
+  const contactFicha = (contactRows[0]?.ficha ?? {}) as Record<
+    string,
+    string | number | boolean | null
+  >;
 
   const agenda = agendaEnabled();
   const catalogIsEnabled = catalogEnabled();
@@ -257,6 +279,15 @@ export async function runAgentTurn(
       ? await getCatalogSnapshot(organizationId).then((snapshot) => isCatalogFresh(snapshot) ? snapshot : null)
       : await getFreshCatalog(organizationId)
     : null;
+  const catalogCategories = catalog ? catalogCategoryGroups(catalog) : [];
+  const catalogGuidance = catalog && lastInbound.text
+    ? catalogGuidanceForTurn(catalog, lastInbound.text)
+    : null;
+  if (catalogGuidance) {
+    if (conversation.isTest) await persistTestOutbound(conversation, catalogGuidance);
+    else await deliverReply(conversation, catalogGuidance);
+    return leido;
+  }
   const catalogContext = catalog ? catalogContextForTurn(catalog, lastInbound.text ?? "") : null;
 
   /**
@@ -285,7 +316,7 @@ export async function runAgentTurn(
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: buildAgentSystemPrompt({ profile, kb, stages, agenda, catalogEnabled: catalogIsEnabled, channel: conversation.channel, catalog: catalogContext }),
+      content: buildAgentSystemPrompt({ profile, kb, stages, agenda, catalogEnabled: catalogIsEnabled, channel: conversation.channel, catalog: catalogContext, catalogCategories, contactFicha }),
     },
     ...history
       .filter((m) => m.text)
@@ -325,9 +356,11 @@ export async function runAgentTurn(
       if (!selected) {
         action = degradeAction(action);
       } else if (conversation.isTest) {
-        await persistTestOutbound(conversation, catalogProductsText(selected, conversation.channel, action.reply));
+        const intro = catalogProductsIntro(selected, action.reply);
+        await persistTestOutbound(conversation, catalogProductsText(selected, conversation.channel, intro, "summary"));
         return leido;
       } else {
+        const intro = catalogProductsIntro(selected, action.reply);
         if (conversation.channel === "whatsapp") {
           let nativeSent = false;
           try {
@@ -335,6 +368,7 @@ export async function runAgentTurn(
               conversationId,
               organizationId,
               retailerIds: action.retailerIds,
+              bodyText: intro,
               aiGenerated: true,
             });
             nativeSent = true;
@@ -342,13 +376,11 @@ export async function runAgentTurn(
             console.warn(`[agente] tarjeta nativa no disponible; se usará texto: ${err instanceof Error ? err.message : "error"}`);
           }
           if (nativeSent) {
-            const reply = action.reply ? stripCatalogLinks(action.reply) : "";
-            if (reply) await deliverReply(conversation, reply);
             return leido;
           }
         }
 
-        const productText = catalogProductsText(selected, conversation.channel, action.reply);
+        const productText = catalogProductsText(selected, conversation.channel, intro, "summary");
         try {
           await deliverReply(conversation, productText);
         } catch (err) {
@@ -436,6 +468,19 @@ export async function runAgentTurn(
       return leido;
     case "update_lead": {
       await appendLeadNote(organizationId, conversation.contactId, action.note);
+      if (action.reply) await deliverReply(conversation, action.reply);
+      return leido;
+    }
+    case "update_ficha": {
+      await upsertFicha({
+        organizationId,
+        contactId: conversation.contactId,
+        ficha: action.ficha as FichaInput,
+      });
+      publish(organizationId, {
+        type: "conversation.updated",
+        data: { conversation: { id: conversationId } },
+      });
       if (action.reply) await deliverReply(conversation, action.reply);
       return leido;
     }

@@ -5,8 +5,10 @@ import {
   Clock3,
   FileText,
   MapPin,
+  MessageSquarePlus,
   Paperclip,
   Send,
+  Sparkles,
   UserRound,
   X,
 } from "lucide-react";
@@ -43,6 +45,9 @@ export function Composer({
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [guidance, setGuidance] = useState("");
+  const [guidanceOpen, setGuidanceOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<TemplateDto[]>([]);
   const [file, setFile] = useState<File | null>(null);
@@ -98,6 +103,37 @@ export function Composer({
     return data?.message ?? `Error ${res.status}`;
   }
 
+  async function suggestReply() {
+    if (suggesting || sending) return;
+    setSuggesting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/conversations/${conversation.id}/suggestion`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ draft: text, guidance }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        suggestion?: string;
+        error?: { message?: string };
+      } | null;
+      if (!res.ok || !data?.suggestion) {
+        setError(data?.error?.message ?? "No se pudo generar la sugerencia. Inténtalo de nuevo.");
+        return;
+      }
+      setText(data.suggestion);
+      setGuidance("");
+      setGuidanceOpen(false);
+      setPanel(null);
+      taRef.current?.focus();
+      setTimeout(autogrow, 0);
+    } catch {
+      setError("No se pudo conectar con la IA. Inténtalo de nuevo.");
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
   async function submit() {
     setError(null);
 
@@ -121,6 +157,8 @@ export function Composer({
       }
       pickFile(null);
       setText("");
+      setGuidance("");
+      setGuidanceOpen(false);
       if (taRef.current) taRef.current.style.height = "auto";
       onSent();
       return;
@@ -142,6 +180,9 @@ export function Composer({
       setText((actual) => (actual ? `${value}\n${actual}` : value));
       taRef.current?.focus();
       setTimeout(autogrow, 0);
+    } else {
+      setGuidance("");
+      setGuidanceOpen(false);
     }
   }
 
@@ -404,6 +445,35 @@ export function Composer({
         </div>
       )}
 
+      {guidanceOpen && (
+        <div className="mb-2 rounded-xl border border-border-strong bg-secondary/50 p-3">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <label htmlFor="reply-guidance" className="text-xs font-semibold text-foreground">
+              Indicación privada para la IA
+            </label>
+            <button
+              onClick={() => setGuidanceOpen(false)}
+              aria-label="Cerrar indicación"
+              className="rounded p-1 text-text-3 hover:bg-secondary"
+            >
+              <X className="h-4 w-4" strokeWidth={1.7} />
+            </button>
+          </div>
+          <textarea
+            id="reply-guidance"
+            value={guidance}
+            onChange={(event) => setGuidance(event.target.value)}
+            maxLength={2000}
+            rows={2}
+            placeholder="Ej.: Ya verifiqué y sí tenemos disponibilidad de ese producto."
+            className="w-full resize-y rounded-md border border-border-strong bg-background px-2.5 py-2 text-sm outline-none placeholder:text-text-3 focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+          />
+          <p className="mt-1 text-[11px] text-text-3">
+            Solo orienta el borrador; no se copiará literalmente ni se enviará al cliente.
+          </p>
+        </div>
+      )}
+
       {/* La caja de escritura en píldora, como la del mockup de la landing */}
       <div className="flex items-end gap-2 rounded-[23px] border border-border-strong bg-background py-1.5 pl-2 pr-1.5 shadow-sm transition-[border-color,box-shadow] focus-within:border-brand focus-within:ring-[3px] focus-within:ring-brand-soft">
         <input
@@ -453,6 +523,31 @@ export function Composer({
             )}
           </div>
         )}
+        <button
+          onClick={() => setGuidanceOpen((open) => !open)}
+          disabled={suggesting || sending}
+          aria-label="Añadir indicación para la IA"
+          aria-pressed={guidanceOpen}
+          title="Añadir una indicación privada para orientar la respuesta"
+          className={cn(
+            "shrink-0 rounded p-1.5 text-text-3 transition-colors hover:bg-secondary hover:text-brand disabled:opacity-40",
+            (guidanceOpen || guidance.trim()) && "bg-secondary text-brand"
+          )}
+        >
+          <MessageSquarePlus className="h-[18px] w-[18px]" strokeWidth={1.7} />
+        </button>
+        <button
+          onClick={() => void suggestReply()}
+          disabled={suggesting || sending}
+          aria-label="Sugerir respuesta con IA"
+          title={suggesting ? "Preparando sugerencia…" : "Sugerir respuesta con IA"}
+          className="shrink-0 rounded p-1.5 text-text-3 transition-colors hover:bg-secondary hover:text-brand disabled:opacity-40"
+        >
+          <Sparkles
+            className={cn("h-[18px] w-[18px]", suggesting && "animate-pulse text-brand")}
+            strokeWidth={1.7}
+          />
+        </button>
         <textarea
           ref={taRef}
           placeholder={file ? "Pie del adjunto (opcional)…" : "Escribe una respuesta…"}

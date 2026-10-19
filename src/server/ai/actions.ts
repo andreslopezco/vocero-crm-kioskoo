@@ -14,6 +14,11 @@ const baseActions = [
     reply: z.string().optional(),
   }),
   z.object({
+    action: z.literal("update_ficha"),
+    ficha: z.record(z.union([z.string(), z.number(), z.boolean()])),
+    reply: z.string().optional(),
+  }),
+  z.object({
     action: z.literal("move_stage"),
     stage: z.string().min(1),
     reply: z.string().optional(),
@@ -50,7 +55,7 @@ const agendaActions = [
 const catalogActions = [
   z.object({
     action: z.literal("send_products"),
-    retailerIds: z.array(z.string().trim().min(1)).min(1).max(30),
+    retailerIds: z.array(z.string().trim().min(1)).min(1).max(3),
     reply: z.string().optional(),
   }),
 ] as const;

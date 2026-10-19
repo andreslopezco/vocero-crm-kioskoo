@@ -469,6 +469,7 @@ export async function sendCatalogProducts(input: {
   conversationId: string;
   organizationId: string;
   retailerIds: string[];
+  bodyText?: string;
   aiGenerated?: boolean;
 }): Promise<SendResult> {
   if (!catalogEnabled()) {
@@ -494,12 +495,20 @@ export async function sendCatalogProducts(input: {
     throw new SendError("meta_error", "Uno de los productos ya no está disponible en el catálogo");
   }
   const text = products.map((product) => `${product.name}${product.price ? ` — ${product.price}` : ""}`).join("\n");
+  const defaultBody = products.length === 1
+    ? "Te comparto esta opción disponible:"
+    : "Te comparto estas opciones disponibles:";
+  const bodyText = [...(input.bodyText?.trim() || defaultBody)].slice(0, 1024).join("");
   const payload = products.length === 1
     ? {
         messaging_product: "whatsapp",
         ...target.destinatario,
-        type: "product",
-        product: { catalog_id: snapshot.catalogId, product_retailer_id: products[0]!.retailerId },
+        type: "interactive",
+        interactive: {
+          type: "product",
+          body: { text: bodyText },
+          action: { catalog_id: snapshot.catalogId, product_retailer_id: products[0]!.retailerId },
+        },
       }
     : {
         messaging_product: "whatsapp",
@@ -507,7 +516,8 @@ export async function sendCatalogProducts(input: {
         type: "interactive",
         interactive: {
           type: "product_list",
-          body: { text: "Productos disponibles" },
+          header: { type: "text", text: "Productos" },
+          body: { text: bodyText },
           action: {
             catalog_id: snapshot.catalogId,
             sections: [{ title: "Productos", product_items: products.map((product) => ({ product_retailer_id: product.retailerId })) }],

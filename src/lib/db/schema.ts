@@ -10,6 +10,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { WhatsappOrderDto } from "@/lib/types";
 
 /**
  * Tiempo: todas las columnas son `timestamp without time zone` y el marco es
@@ -417,6 +418,7 @@ export const message = pgTable(
     direction: text("direction", { enum: ["in", "out"] }).notNull(),
     type: text("type").notNull().default("text"),
     text: text("text"),
+    order: jsonb("order_payload").$type<WhatsappOrderDto | null>(),
     status: text("status", {
       enum: ["pending", "sent", "delivered", "read", "failed"],
     })

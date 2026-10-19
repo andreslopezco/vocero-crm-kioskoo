@@ -46,12 +46,13 @@ arbitrario ni mantener una copia de inventario independiente.
   confiables. Para enviar, el modelo propone únicamente `product_retailer_id`;
   el servidor resuelve la lista contra el snapshot completo y el `catalog_id`
   vinculado.
-- **Envío nativo**: exactamente 1 producto envía `type=product`; 2–30 envían
-  `type=interactive`, `interactive.type=product_list`. Se intenta solo por
+- **Envío nativo**: exactamente 1 producto envía `type=interactive` con
+  `interactive.type=product`; 2–30 envían `type=interactive` con
+  `interactive.type=product_list` y encabezado de texto. Se intenta solo por
   WhatsApp y dentro de la ventana vigente. Si Meta rechaza el formato, el agente
-  envía texto con los datos verificados y adjunta las imágenes HTTPS disponibles.
-  Otros canales (incluido TikTok) reciben una ficha de texto sin enlaces de
-  imagen ni producto. El Laboratorio persiste una
+  envía un resumen de nombre y precio y adjunta las imágenes HTTPS disponibles.
+  Otros canales (incluido TikTok) reciben el mismo resumen sin enlaces de imagen
+  ni producto. El Laboratorio persiste una
   simulación y jamás llama Meta. No se crea reserva, carrito ni orden.
 - **Compatibilidad**: no se cambian `/api/bot/*` ni despacho 021/025; `/api/health`
   gana el campo aditivo `features.catalogo` para reflejar la bandera. El módulo
@@ -91,9 +92,18 @@ arbitrario ni mantener una copia de inventario independiente.
   no existe un snapshot fresco.
 - La acción de producto funciona para cualquier canal cuando existe snapshot;
   tarjeta nativa e imágenes adjuntas son capacidades exclusivas de WhatsApp.
-  Otros canales responden con texto de producto y URL de imagen.
+  Otros canales responden con un resumen de nombre y precio, sin enlaces.
 - El agente no inventa campos ausentes, precios o stock. Productos fuera de
   stock nunca se ofrecen como disponibles.
+- Una solicitud general no envía productos: muestra hasta 8 categorías reales
+  del catálogo y pregunta cuál interesa. Si Meta no publica categorías, pregunta
+  qué busca, para qué lo necesita o qué presupuesto tiene, sin inventar etiquetas.
+- Tras elegir categoría o explicar la necesidad, el agente muestra como máximo 3
+  productos relevantes. Si la categoría contiene más de 3 y no hay otro criterio,
+  pide tipo, uso o presupuesto antes de seleccionar y puede ofrecer ver más.
+- La introducción de `send_products` no repite nombres, precios ni características.
+  Marca, material, estado, descripción y otros atributos solo se amplían cuando
+  el cliente los pide o necesita comparar.
 - La respuesta solo muestra atributos comerciales legibles (por ejemplo,
   material, color, tamaño y condición); nunca filtra metadatos de feed como
   inventario, estado de publicación, etiquetas o IDs internos.
@@ -104,12 +114,13 @@ arbitrario ni mantener una copia de inventario independiente.
 
 ### C. Enviar formato nativo (P1)
 
-- Una selección válida intenta enviar producto individual; dos o más hasta 30
-  intentan lista nativa. Ningún ID/catálogo elegido libremente por el modelo
+- Una selección válida del agente intenta enviar producto individual; dos o más
+  hasta 3 intentan lista nativa. El transporte admite hasta 30 para otros usos
+  internos. Ningún ID/catálogo elegido libremente por el modelo
   llega a Graph sin validación de servidor.
-- Si el formato nativo falla en WhatsApp, se entrega ficha de texto y se intentan
-  las imágenes del catálogo. Fuera de WhatsApp nunca se intenta tarjeta; se usa
-  texto con los datos disponibles.
+- Si el formato nativo falla en WhatsApp, se entrega una lista concisa de nombre
+  y precio y se intentan las imágenes del catálogo. Fuera de WhatsApp nunca se
+  intenta tarjeta; se usa el mismo resumen conciso.
 - Ventana cerrada, ID desconocido, producto fuera de stock, módulo apagado o
   snapshot caducado impiden presentar productos como disponibles.
 - La conversación guarda un registro legible de lo enviado y conserva el
