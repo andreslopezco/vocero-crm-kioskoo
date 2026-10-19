@@ -91,6 +91,65 @@ function showValue(value: unknown): string {
   try { return JSON.stringify(value); } catch { return ""; }
 }
 
+const DETAIL_LABELS: Record<string, string> = {
+  status: "Estado en Meta",
+  condition: "Condición",
+  inventory: "Unidades disponibles",
+  material: "Material",
+  color: "Color",
+  size: "Tamaño",
+  pattern: "Diseño",
+  category: "Categoría",
+  product_type: "Tipo de producto",
+  manufacturer_part_number: "Referencia del fabricante",
+  gtin: "Código de barras",
+  origin_country: "País de origen",
+  gender: "Público",
+  age_group: "Edad recomendada",
+  sale_price: "Precio de oferta",
+  tags: "Etiquetas",
+};
+
+const DETAIL_VALUE_TRANSLATIONS: Record<string, Record<string, string>> = {
+  status: { PUBLISHED: "Publicado", PENDING: "Pendiente", REJECTED: "Rechazado", PROCESSING: "En revisión", IN_REVIEW: "En revisión" },
+  condition: { new: "Nuevo", refurbished: "Reacondicionado", used: "Usado" },
+  gender: { male: "Hombres", female: "Mujeres", unisex: "Unisex" },
+  age_group: { newborn: "Recién nacido", infant: "Bebé", toddler: "Niño pequeño", kids: "Niños", adult: "Adultos" },
+};
+
+function productDetails(product: Product): Array<{ label: string; value: string }> {
+  const details: Array<{ label: string; value: string }> = [];
+  const attributes = product.attributes;
+
+  for (const [key, label] of Object.entries(DETAIL_LABELS)) {
+    const raw = attributes[key];
+    if (raw == null || typeof raw === "object" || raw === "") continue;
+    if (key !== "inventory" && (raw === 0 || raw === "0")) continue;
+
+    const text = String(raw).trim();
+    if (!text) continue;
+    const translated = DETAIL_VALUE_TRANSLATIONS[key]?.[text.toLowerCase()]
+      ?? DETAIL_VALUE_TRANSLATIONS[key]?.[text.toUpperCase()]
+      ?? text.replaceAll("_", " ");
+    const value = key === "inventory"
+      ? `${text} ${text === "1" ? "unidad" : "unidades"}`
+      : key === "sale_price" && product.currency
+        ? `${text} ${product.currency}`
+        : translated;
+    details.push({ label, value });
+  }
+
+  const weight = attributes.shipping_weight_value;
+  const unit = attributes.shipping_weight_unit;
+  if (typeof weight === "number" && Number.isFinite(weight) && weight > 0) {
+    const formatted = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 2 }).format(weight);
+    const unitLabel = typeof unit === "string" ? ` ${unit.toLowerCase()}` : "";
+    details.push({ label: "Peso de envío", value: `${formatted}${unitLabel}` });
+  }
+
+  return details;
+}
+
 function ProductImage({ src, alt }: { src: string | null; alt: string }) {
   const [failed, setFailed] = useState(false);
   return (
@@ -262,9 +321,7 @@ export function CatalogPage() {
                   </thead>
                   <tbody>
                     {filtered.map((product) => {
-                      const attributes = Object.entries(product.attributes).filter(([key, value]) =>
-                        value != null && showValue(value) !== "" && !["meta_product_id", "additional_image_urls", "image_cdn_urls", "additional_image_cdn_urls", "images"].includes(key)
-                      );
+                      const details = productDetails(product);
                       const expanded = expandedProductId === product.retailerId;
                       return <Fragment key={product.retailerId}>
                         <tr className="border-t align-middle first:border-t-0">
@@ -289,7 +346,7 @@ export function CatalogPage() {
                             </Badge>
                           </td>
                           <td className="px-3 py-3">
-                            {attributes.length > 0 || product.description || product.url ? <Button
+                            {details.length > 0 || product.description || product.url ? <Button
                               type="button"
                               size="sm"
                               variant="ghost"
@@ -312,16 +369,16 @@ export function CatalogPage() {
                           <td id={`catalog-details-${product.retailerId}`} colSpan={6} className="px-3 pb-4 pt-3 sm:px-4">
                             <section aria-label={`Detalles de ${product.name}`} className="rounded-lg border bg-card p-4">
                               <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
-                                <div className="min-w-0 text-xs">
-                                  <p className="font-semibold">ID: {product.retailerId}</p>
-                                  {product.description && <p className="mt-2 whitespace-pre-wrap text-text-2">Descripción: {product.description}</p>}
-                                </div>
-                                {attributes.map(([key, value]) => <div key={key} className="min-w-0 border-t pt-2 text-xs sm:border-t-0 sm:pt-0">
-                                  <p className="text-muted-foreground">{key.replaceAll("_", " ")}</p>
-                                  <p className="mt-1 break-words font-medium">{showValue(value)}</p>
+                                {product.description && <div className="min-w-0 text-xs">
+                                  <p className="text-muted-foreground">Descripción</p>
+                                  <p className="mt-1 whitespace-pre-wrap break-words font-medium text-text-2">{product.description}</p>
+                                </div>}
+                                {details.map(({ label, value }) => <div key={label} className="min-w-0 border-t pt-2 text-xs sm:border-t-0 sm:pt-0">
+                                  <p className="text-muted-foreground">{label}</p>
+                                  <p className="mt-1 break-words font-medium">{value}</p>
                                 </div>)}
                                 {product.url && <div className="border-t pt-2 text-xs sm:border-t-0 sm:pt-0">
-                                  <a href={product.url} target="_blank" rel="noreferrer" className="font-semibold text-brand hover:underline">Abrir en tienda</a>
+                                  <a href={product.url} target="_blank" rel="noreferrer" className="font-semibold text-brand hover:underline">Ver página del producto</a>
                                 </div>}
                               </div>
                             </section>
