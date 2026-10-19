@@ -75,9 +75,12 @@ export async function createPendingOrder(input: {
   if (!shopOrderKey) throw new DropiOrderError("La herramienta de Dropi no permite una clave externa para evitar pedidos duplicados.", "idempotency_unavailable");
   const shopOrderId = `voc-${createHash("sha256").update(`${input.organizationId}:${input.conversationId}`).digest("hex").slice(0, 24)}`;
   payload[shopOrderKey] = shopOrderId;
+  const rateTypeKey = Object.keys(properties).find((key) => key.toLowerCase() === "rate_type");
+  if (rateTypeKey && (payload[rateTypeKey] === undefined || payload[rateTypeKey] === null || payload[rateTypeKey] === "")) {
+    payload[rateTypeKey] = connection.rateType;
+  }
   const missing = (schemaDef.required ?? []).filter((key) => payload[key] === undefined || payload[key] === null || payload[key] === "");
   if (missing.length) throw new DropiOrderError(`Faltan datos obligatorios del pedido: ${missing.join(", ")}.`, "missing_fields");
-  if (!payload.rate_type && properties.rate_type) payload.rate_type = connection.rateType;
 
   const rowId = newId("dropiOrderSubmission");
   const now = new Date();
