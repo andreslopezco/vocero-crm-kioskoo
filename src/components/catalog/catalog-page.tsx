@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 type Product = {
   retailerId: string;
+  dropiProductId: string | null;
   name: string;
   description: string | null;
   availability: string | null;
@@ -25,6 +26,7 @@ type Catalog = { catalogId: string; name: string | null; syncedAt: string; produ
 type CatalogResponse = { catalog: Catalog | null; products: Product[] };
 type ProductForm = {
   retailerId: string;
+  dropiProductId: string;
   name: string;
   description: string;
   availability: "" | "in stock" | "out of stock" | "preorder";
@@ -43,7 +45,7 @@ type ProductForm = {
 type ProductEditor = { mode: "create" | "edit"; product?: Product };
 
 const EMPTY_FORM: ProductForm = {
-  retailerId: "", name: "", description: "", availability: "", condition: "",
+  retailerId: "", dropiProductId: "", name: "", description: "", availability: "", condition: "",
   inventory: "",
   price: "", currency: "", brand: "", url: "", category: "",
   material: "", color: "", size: "", pattern: "",
@@ -67,6 +69,7 @@ function formFromProduct(product: Product): ProductForm {
   };
   return {
     retailerId: product.retailerId,
+    dropiProductId: product.dropiProductId ?? "",
     name: product.name,
     description: product.description ?? "",
     availability: product.availability === "in stock" || product.availability === "out of stock" || product.availability === "preorder" ? product.availability : "",
@@ -351,7 +354,7 @@ export function CatalogPage() {
                             </Badge>
                           </td>
                           <td className="px-3 py-3">
-                            {details.length > 0 || product.description || product.url ? <Button
+                            {details.length > 0 || product.description || product.url || product.dropiProductId ? <Button
                               type="button"
                               size="sm"
                               variant="ghost"
@@ -374,6 +377,10 @@ export function CatalogPage() {
                           <td id={`catalog-details-${product.retailerId}`} colSpan={6} className="px-3 pb-4 pt-3 sm:px-4">
                             <section aria-label={`Detalles de ${product.name}`} className="rounded-lg border bg-card p-4">
                               <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
+                                {product.dropiProductId && <div className="min-w-0 border-t pt-2 text-xs sm:border-t-0 sm:pt-0">
+                                  <p className="text-muted-foreground">ID de producto en Dropi</p>
+                                  <p className="mt-1 break-words font-medium">{product.dropiProductId}</p>
+                                </div>}
                                 {product.description && <div className="min-w-0 text-xs">
                                   <p className="text-muted-foreground">Descripción</p>
                                   <p className="mt-1 whitespace-pre-wrap break-words font-medium text-text-2">{product.description}</p>
@@ -418,7 +425,7 @@ export function CatalogPage() {
           <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-card px-5 py-4">
             <div>
               <h3 id="catalog-product-title" className="text-base font-semibold">{editor.mode === "create" ? "Nuevo producto" : "Editar producto"}</h3>
-              <p className="mt-1 text-xs text-text-3">Los cambios se guardan directamente en el catálogo de Meta.</p>
+              <p className="mt-1 text-xs text-text-3">Los datos comerciales se guardan en Meta; el ID de Dropi se conserva solo en el catálogo local.</p>
             </div>
             <Button type="button" size="icon" variant="ghost" aria-label="Cerrar" disabled={saving} onClick={() => setEditor(null)}>
               <X className="h-4 w-4" />
@@ -437,6 +444,11 @@ export function CatalogPage() {
                 <Input required maxLength={200} value={form.name} disabled={saving} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Nombre" />
               </label>
             </div>
+            <label className="block space-y-1.5 text-sm font-medium">
+              <FieldLabel>ID de producto en Dropi</FieldLabel>
+              <Input inputMode="numeric" pattern="[0-9]*" maxLength={24} value={form.dropiProductId} disabled={saving} onChange={(event) => setForm({ ...form, dropiProductId: event.target.value })} placeholder="ID numérico del producto en Dropi" />
+              <span className="block text-xs font-normal text-text-3">Vincula este producto local con el ID que aparece en Dropi. No se envía a Meta.</span>
+            </label>
             <label className="block space-y-1.5 text-sm font-medium">
               <FieldLabel required>Descripción</FieldLabel>
               <Textarea required maxLength={5000} rows={3} value={form.description} disabled={saving} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Descripción" />
