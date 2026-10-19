@@ -4,6 +4,8 @@ import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
 import { getDropiConnection } from "./credentials";
+import { getCatalogSnapshot } from "@/server/catalog/service";
+import { dropiOrderContainsOnlyMappedProducts, dropiOrderProductIds, dropiProductIdFromAttributes } from "./product-mapping";
 import { callDropiTool, listDropiTools } from "./mcp-client";
 
 const EXPECTED_STATUS = "PENDIENTE CONFIRMACION";
@@ -16,6 +18,11 @@ export async function dropiPromptContext(organizationId: string, query: string) 
   const connection = await getDropiConnection(organizationId);
   if (!connection || connection.status !== "connected") return null;
   let productData: string | null = null;
+  const localCatalog = await getCatalogSnapshot(organizationId);
+  const catalogProducts = (localCatalog?.products ?? []).flatMap((product) => {
+    const dropiProductId = dropiProductIdFromAttributes(product.attributes);
+    return dropiProductId ? [{ retailerId: product.retailerId, name: product.name, dropiProductId }] : [];
+  });
   const productTool = connection.bundle.tools?.find((tool) => tool.name === "list_products");
   const productSchema = productTool?.inputSchema as { properties?: Record<string, unknown>; required?: string[] } | undefined;
   if (productTool) {
@@ -37,6 +44,7 @@ export async function dropiPromptContext(organizationId: string, query: string) 
     orderCreationEnabled: connection.orderCreationEnabled,
     tools: connection.bundle.tools ?? [],
     productData,
+    catalogProducts,
   };
 }
 
@@ -69,6 +77,19 @@ export async function createPendingOrder(input: {
   if (!createTool || !schemaDef || schemaDef.type !== "object") throw new DropiOrderError("Dropi no expone un esquema válido para crear pedidos.", "tool_unavailable");
   const properties = schemaDef.properties ?? {};
   const payload = { ...input.payload };
+  const productsKey = Object.keys(properties).find((key) => key.toLowerCase() === "products");
+  if (!productsKey) throw new DropiOrderError("Dropi no expone productos en el esquema de creación de órdenes.", "tool_unavailable");
+  const productIds = dropiOrderProductIds(payload[productsKey]);
+  if (!productIds) throw new DropiOrderError("Falta seleccionar al menos un producto y su cantidad para el pedido.", "missing_fields");
+  const localCatalog = await getCatalogSnapshot(input.organizationId);
+  const mappedProductIds = new Set((localCatalog?.products ?? [])
+    .map((product) => dropiProductIdFromAttributes(product.attributes))
+    .filter((id): id is string => id !== null));
+  if (!dropiOrderContainsOnlyMappedProducts(payload[productsKey], mappedProductIds)) {
+    throw new DropiOrderError("El producto elegido no tiene un ID de Dropi vinculado en el Catálogo. Vincúlalo antes de crear el pedido.", "product_unmapped");
+  }
+  payload[productsKey] = (payload[productsKey] as Array<Record<string, unknown>>)
+    .map((item) => ({ ...item, id: Number(item.id) }));
   // Shop ID is mandatory for local reconciliation; do not submit if the official
   // tool cannot receive it because a timeout could otherwise create duplicates.
   const shopOrderKey = Object.keys(properties).find((key) => key.toLowerCase() === "shop_order_id");
