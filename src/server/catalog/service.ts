@@ -81,7 +81,9 @@ export function catalogProductGraphPayload(product: CatalogProductMutation, mode
     description: product.description,
     availability: product.availability,
     condition: product.condition,
-    price: `${product.price} ${product.currency}`,
+    // The Graph API mutation expects price as a numeric value and currency separately.
+    price: Number(product.price),
+    currency: product.currency,
     brand: product.brand,
     image_url: product.imageUrls[0],
     additional_image_urls: product.imageUrls.slice(1),

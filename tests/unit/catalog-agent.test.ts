@@ -89,7 +89,8 @@ describe("catálogo Meta del agente (031)", () => {
     expect(createPayload).toMatchObject({
       allow_upsert: false,
       retailer_id: "SKU-OLLAS-01",
-      price: "309900 COP",
+      price: 309900,
+      currency: "COP",
       image_url: "https://cdn.example.com/olla.jpg",
       additional_image_urls: ["https://cdn.example.com/olla-lateral.jpg"],
       material: "Acero inoxidable",
