@@ -100,7 +100,7 @@ describe("catálogo Meta del agente (031)", () => {
       material: "Acero inoxidable",
     });
     expect(catalogProductGraphPayload({ ...parsed, price: "309900.50" }, "create").price).toBe(30990050);
-    expect(updatePayload.allow_upsert).toBe(true);
+    expect(updatePayload).not.toHaveProperty("allow_upsert");
     expect(createPayload).not.toHaveProperty("catalog_id");
   });
 

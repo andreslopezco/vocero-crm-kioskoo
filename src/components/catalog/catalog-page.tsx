@@ -179,13 +179,15 @@ export function CatalogPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, price: form.price.trim(), currency: form.currency.trim().toUpperCase() }),
       });
-      const data = await response.json() as { ok?: boolean; synced?: boolean; error?: { message?: string } };
+      const data = await response.json() as { ok?: boolean; synced?: boolean; imageSyncFailed?: boolean; error?: { message?: string } };
       if (!response.ok) throw new Error(data.error?.message ?? "No se pudo guardar el producto.");
       setEditor(null);
       await load();
       setSuccess(data.synced
         ? editor.mode === "create" ? "Producto creado en Meta." : "Producto actualizado en Meta."
-        : "Meta guardó el producto, pero no se pudo actualizar la vista. Pulsa «Sincronizar» para recargarla.");
+        : data.imageSyncFailed
+          ? "Meta guardó los cambios, pero no confirmó las nuevas imágenes. Sincroniza de nuevo antes de dar el cambio por aplicado."
+          : "Meta guardó el producto, pero no se pudo actualizar la vista. Pulsa «Sincronizar» para recargarla.");
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "No se pudo guardar el producto.");
     } finally {
@@ -316,7 +318,7 @@ export function CatalogPage() {
                   <tbody>
                     {filtered.map((product) => {
                       const attributes = Object.entries(product.attributes).filter(([key, value]) =>
-                        value != null && showValue(value) !== "" && !["additional_image_urls", "image_cdn_urls", "additional_image_cdn_urls"].includes(key)
+                        value != null && showValue(value) !== "" && !["meta_product_id", "additional_image_urls", "image_cdn_urls", "additional_image_cdn_urls"].includes(key)
                       );
                       const expanded = expandedProductId === product.retailerId;
                       return <Fragment key={product.retailerId}>

@@ -26,7 +26,7 @@ async function mutateProduct(
       parsed.data as CatalogProductMutation,
       mode
     );
-    return Response.json({ ok: true, synced: result.synced });
+    return Response.json({ ok: true, synced: result.synced, imageSyncFailed: result.imageSyncFailed ?? false });
   } catch (err) {
     if (err instanceof CatalogError) {
       return Response.json({ error: { code: err.code, message: err.message } }, { status: errorStatus(err) });

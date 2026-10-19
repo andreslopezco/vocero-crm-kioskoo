@@ -9,7 +9,7 @@ const FRESH_MS = 10 * 60_000;
 const PAGE_SIZE = 100;
 const MAX_PAGES = 200;
 const PRODUCT_FIELDS = [
-  "retailer_id", "name", "description", "availability", "price", "currency",
+  "id", "retailer_id", "name", "description", "availability", "price", "currency",
   "brand", "image_url", "url", "category", "condition",
   "manufacturer_part_number", "manufacturer_info", "gtin", "color", "material",
   "size", "pattern", "gender", "age_group", "product_type", "origin_country",
@@ -79,7 +79,7 @@ export function catalogProductGraphPayload(product: CatalogProductMutation, mode
   // while the direct Meta mutation stores the amount in hundredths (30990000).
   const priceInMinorUnits = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
   return {
-    allow_upsert: mode === "update",
+    ...(mode === "create" ? { allow_upsert: false } : {}),
     retailer_id: product.retailerId,
     name: product.name,
     description: product.description,
@@ -108,7 +108,7 @@ export async function saveCatalogProduct(
   organizationId: string,
   product: CatalogProductMutation,
   mode: "create" | "update"
-): Promise<{ synced: boolean }> {
+): Promise<{ synced: boolean; imageSyncFailed?: boolean }> {
   const [credentials, snapshot] = await Promise.all([
     getCredentialsByOrg(organizationId),
     getCatalogSnapshot(organizationId),
@@ -127,8 +127,28 @@ export async function saveCatalogProduct(
     throw new CatalogError("No se encontró el producto en el catálogo sincronizado; vuelve a sincronizar", "product_not_found");
   }
 
+  // Las ediciones se hacen contra el ID de nodo de Meta, no mediante
+  // allow_upsert/retailer_id en el edge del catálogo. Esto evita que Meta
+  // acepte el upsert sin cambiar el item que Commerce Manager está mostrando.
+  let metaProductId: string | null = null;
+  if (mode === "update") {
+    let current = snapshot.products.find((item) => item.retailerId === product.retailerId);
+    const attributes = current?.attributes as Record<string, unknown> | undefined;
+    if (typeof attributes?.meta_product_id !== "string") {
+      const refreshed = await syncCatalog(organizationId);
+      current = refreshed.products.find((item) => item.retailerId === product.retailerId);
+    }
+    const refreshedAttributes = current?.attributes as Record<string, unknown> | undefined;
+    metaProductId = typeof refreshedAttributes?.meta_product_id === "string"
+      ? refreshedAttributes.meta_product_id
+      : null;
+    if (!metaProductId) {
+      throw new CatalogError("No se pudo identificar el producto en Meta; sincroniza el catálogo e inténtalo de nuevo", "product_not_found");
+    }
+  }
+
   try {
-    await graphRequest<{ id?: string }>(`${snapshot.catalogId}/products`, {
+    await graphRequest<{ id?: string }>(mode === "update" ? metaProductId! : `${snapshot.catalogId}/products`, {
       method: "POST",
       token: credentials.token,
       body: catalogProductGraphPayload(product, mode),
@@ -151,7 +171,16 @@ export async function saveCatalogProduct(
   const pending = inFlight.get(organizationId);
   if (pending) await pending.catch(() => undefined);
   try {
-    await syncCatalog(organizationId);
+    const refreshed = await syncCatalog(organizationId);
+    if (mode === "update") {
+      const updated = refreshed.products.find((item) => item.retailerId === product.retailerId);
+      const attrs = updated?.attributes as Record<string, unknown> | undefined;
+      const actualImageUrls = [updated?.imageUrl, ...(Array.isArray(attrs?.additional_image_urls) ? attrs.additional_image_urls : [])]
+        .filter((url): url is string => typeof url === "string" && url.length > 0);
+      if (JSON.stringify(actualImageUrls) !== JSON.stringify(product.imageUrls)) {
+        return { synced: false, imageSyncFailed: true };
+      }
+    }
     return { synced: true };
   } catch {
     // El cambio ya fue aceptado por Meta: no informamos un falso fallo que
@@ -167,6 +196,7 @@ function normalizeProduct(organizationId: string, catalogId: string, product: Me
     "brand", "image_url", "url",
   ]);
   const attributes = Object.fromEntries(Object.entries(product).filter(([key]) => !known.has(key)));
+  if (typeof product.id === "string") attributes.meta_product_id = product.id;
   return {
     id: newId("metaCatalogProduct"), organizationId, catalogId,
     retailerId: product.retailer_id.trim(), name: product.name.trim(),
