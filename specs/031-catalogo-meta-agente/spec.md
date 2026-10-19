@@ -79,6 +79,11 @@ arbitrario ni convertir el CRM en un editor de inventario.
   Otros canales responden con texto de producto y URL de imagen.
 - El agente no inventa campos ausentes, precios o stock. Productos fuera de
   stock nunca se ofrecen como disponibles.
+- La respuesta solo muestra atributos comerciales legibles (por ejemplo,
+  material, color, tamaño y condición); nunca filtra metadatos de feed como
+  inventario, estado de publicación, etiquetas o IDs internos.
+- Los textos del agente no incluyen URLs de imágenes ni de producto. Las
+  imágenes de WhatsApp se envían como adjuntos independientes cuando aplica.
 - Snapshot ausente/caducado y fallo de Meta hacen que el agente no recomiende
   ni envíe productos; conserva la posibilidad de responder texto seguro.
 

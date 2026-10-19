@@ -51,13 +51,25 @@ describe("catálogo Meta del agente (031)", () => {
   });
 
   it("el prompt separa el catálogo Meta del conocimiento general y excluye agotados", () => {
+    const productWithPlatformFields = {
+      ...product,
+      imageUrl: "https://cdn.example.com/product.jpg",
+      url: "https://shop.example.com/product",
+      attributes: { material: "acero inoxidable", status: "PUBLISHED", inventory: 100, visibility: "published" },
+    };
     const prompt = buildAgentSystemPrompt({
       profile,
       kb: [],
       stages: [],
-      catalog: { ...catalog, products: [product, { ...product, retailerId: "OUT", availability: "out of stock" }] },
+      catalog: { ...catalog, products: [productWithPlatformFields, { ...product, retailerId: "OUT", availability: "out of stock" }] },
     });
     expect(prompt).toContain("SKU-01");
+    expect(prompt).toContain("acero inoxidable");
+    expect(prompt).not.toContain("PUBLISHED");
+    expect(prompt).not.toContain("inventory");
+    expect(prompt).not.toContain("cdn.example.com");
+    expect(prompt).not.toContain("shop.example.com");
+    expect(prompt).toContain("No incluyas enlaces ni URLs");
     expect(prompt).not.toContain('"retailerId":"OUT"');
     expect(prompt).toContain("send_products");
     expect(prompt).toContain("no inventes propiedades, precios o disponibilidad");
@@ -107,17 +119,34 @@ describe("catálogo Meta del agente (031)", () => {
     expect(resolveInStockProducts({ ...catalog, products: [{ ...product, availability: "out of stock" }] }, ["SKU-01"])).toBeNull();
   });
 
-  it("construye ficha de texto con atributos e imagen en canales sin tarjeta nativa", () => {
+  it("construye ficha comercial, sin metadatos técnicos ni enlaces", () => {
     const message = catalogProductsText(
-      [{ ...product, imageUrl: "https://cdn.example.com/olla.jpg", url: "https://tienda.example.com/olla" }],
+      [{
+        ...product,
+        description: "Olla de acero. https://tienda.example.com/olla",
+        imageUrl: "https://cdn.example.com/olla.jpg",
+        url: "https://tienda.example.com/olla",
+        attributes: {
+          material: "acero inoxidable",
+          status: "PUBLISHED",
+          condition: "new",
+          inventory: 100,
+          custom_number_0: 0,
+        },
+      }],
       "tiktok",
-      "Mira esta opción"
+      "Mira esta opción https://tienda.example.com"
     );
     expect(message).toContain("Mira esta opción");
     expect(message).toContain("Bolso de cuero");
     expect(message).toContain("Precio: 120000 COP");
-    expect(message).toContain("material: cuero");
-    expect(message).toContain("Imagen: https://cdn.example.com/olla.jpg");
-    expect(message).toContain("Ver producto: https://tienda.example.com/olla");
+    expect(message).toContain("Olla de acero");
+    expect(message).toContain("Material: acero inoxidable");
+    expect(message).toContain("Estado: nuevo");
+    expect(message).not.toContain("PUBLISHED");
+    expect(message).not.toContain("inventory");
+    expect(message).not.toContain("custom_number");
+    expect(message).not.toContain("https://");
+    expect(message).not.toContain("cdn.example.com");
   });
 });

@@ -41,7 +41,13 @@ completo.
 En WhatsApp la acción intenta primero el formato nativo, tras la prevalidación
 existente de destino, ventana y credenciales. Si falla, se envía una ficha de
 texto y luego las imágenes HTTPS presentes en el snapshot. En otros canales no
-se intenta tarjeta: se envían los datos como texto con URL de imagen/producto.
-Las imágenes externas se guardan como referencias de medio para previsualizar
+se intenta tarjeta: se envían únicamente los datos comerciales como texto, sin
+exponer URLs de imagen/producto. Las imágenes externas se guardan como referencias de medio para previsualizar
 en el hilo, no se descargan a almacenamiento propio. Laboratorio persiste una
 simulación y no ejecuta ninguna solicitud Graph.
+
+La ficha textual y el prompt solo incluyen atributos comerciales en español
+(marca, precio, descripción, categoría, condición, material, tamaño, color,
+diseño, público, edad, tipo y país de origen). Se excluyen URLs, IDs de feed y
+metadatos operativos como estado, inventario, visibilidad, etiquetas y campos
+custom numéricos.

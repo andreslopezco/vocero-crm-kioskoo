@@ -32,7 +32,7 @@ import { bookSlot, offerSlots } from "@/server/agenda/agent";
 import { getOffers, mapaDeHuecosParaModelo } from "@/server/agenda/offers";
 import { catalogEnabled } from "@/server/catalog/flag";
 import { getCatalogSnapshot, getFreshCatalog, isCatalogFresh, resolveInStockProducts } from "@/server/catalog/service";
-import { catalogContextForTurn, catalogProductsText } from "@/server/catalog/context";
+import { catalogContextForTurn, catalogProductsText, stripCatalogLinks } from "@/server/catalog/context";
 
 /**
  * Turno del agente (FR-021..FR-025).
@@ -342,7 +342,8 @@ export async function runAgentTurn(
             console.warn(`[agente] tarjeta nativa no disponible; se usará texto: ${err instanceof Error ? err.message : "error"}`);
           }
           if (nativeSent) {
-            if (action.reply) await deliverReply(conversation, action.reply);
+            const reply = action.reply ? stripCatalogLinks(action.reply) : "";
+            if (reply) await deliverReply(conversation, reply);
             return leido;
           }
         }

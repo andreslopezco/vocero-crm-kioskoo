@@ -4,6 +4,61 @@ import { capabilitiesFor } from "@/server/channels/capabilities";
 
 const MAX_CONTEXT_PRODUCTS = 25;
 const TOKEN = /[\p{L}\p{N}]{2,}/gu;
+const CUSTOMER_ATTRIBUTES: Record<string, string> = {
+  category: "Categoría",
+  condition: "Estado",
+  material: "Material",
+  size: "Tamaño",
+  color: "Color",
+  pattern: "Diseño",
+  gender: "Público",
+  age_group: "Grupo de edad",
+  product_type: "Tipo",
+  origin_country: "País de origen",
+};
+const CONDITION_LABELS: Record<string, string> = {
+  new: "nuevo",
+  refurbished: "reacondicionado",
+  used: "usado",
+};
+
+function asAttributes(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+/** Los atributos técnicos del feed de Meta nunca se presentan al cliente. */
+export function customerFacingCatalogAttributes(value: unknown): Record<string, string> {
+  const attributes = asAttributes(value);
+  return Object.fromEntries(Object.entries(CUSTOMER_ATTRIBUTES)
+    .flatMap(([key, label]) => {
+      const value = attributes[key];
+      if (value == null || value === "") return [];
+      const raw = typeof value === "string" ? value : JSON.stringify(value);
+      const localized = key === "condition" && typeof raw === "string"
+        ? (CONDITION_LABELS[raw.toLocaleLowerCase()] ?? raw)
+        : raw;
+      return localized ? [[label, stripCatalogLinks(localized)]] : [];
+    }));
+}
+
+export function stripCatalogLinks(text: string): string {
+  return text
+    .replace(/(?:https?:\/\/|www\.)\S+/giu, "")
+    .replace(/\b(?:más detalles en|ver más en|ver en|consulta en|disponible en)\s*$/iu, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t.,;:|—-]+$/g, "")
+    .trim();
+}
+
+export function customerFacingCatalogDescription(product: CatalogSnapshot["products"][number]): string | null {
+  const attributes = asAttributes(product.attributes);
+  const description = product.description
+    ?? (typeof attributes.short_description === "string" ? attributes.short_description : null)
+    ?? (typeof attributes.rich_text_description === "string" ? attributes.rich_text_description : null);
+  return description ? stripCatalogLinks(description) || null : null;
+}
 
 /** Selección lexical acotada para no enviar catálogos enteros al proveedor de IA. */
 export function catalogContextForTurn(
@@ -32,21 +87,17 @@ export function catalogProductsText(
   intro?: string
 ): string {
   const lines = products.map((product) => {
+    const attributes = customerFacingCatalogAttributes(product.attributes);
     const details = [
       product.brand ? `Marca: ${product.brand}` : null,
       product.price ? `Precio: ${product.price}${product.currency ? ` ${product.currency}` : ""}` : null,
-      product.description,
-      ...Object.entries(product.attributes ?? {}).map(([key, value]) => {
-        if (value == null || value === "") return null;
-        const rendered = typeof value === "string" ? value : JSON.stringify(value);
-        return `${key.replaceAll("_", " ")}: ${rendered}`;
-      }),
-      product.imageUrl ? `Imagen: ${product.imageUrl}` : null,
-      product.url ? `Ver producto: ${product.url}` : null,
+      customerFacingCatalogDescription(product),
+      ...Object.entries(attributes).map(([label, value]) => `${label}: ${value}`),
     ].filter((part): part is string => Boolean(part));
     return [`• ${product.name}`, ...details.map((detail) => `  ${detail}`)].join("\n");
   });
-  const text = [intro?.trim() || null, ...lines].filter(Boolean).join("\n\n");
+  const safeIntro = intro ? stripCatalogLinks(intro) : "";
+  const text = [safeIntro || null, ...lines].filter(Boolean).join("\n\n");
   // Reutilizar los límites declarados por canal; byte-limit se mide en UTF-8
   // para no exceder Meta por acentos o emojis.
   const { maxTextChars, maxTextBytes } = capabilitiesFor(channel);
