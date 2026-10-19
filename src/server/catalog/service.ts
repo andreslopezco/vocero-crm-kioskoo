@@ -74,6 +74,10 @@ export type CatalogProductMutation = {
 };
 
 export function catalogProductGraphPayload(product: CatalogProductMutation, mode: "create" | "update") {
+  const [whole, fraction = ""] = product.price.split(".");
+  // Product editor/catalog snapshots use major currency units (e.g. 309900 COP),
+  // while the direct Meta mutation stores the amount in hundredths (30990000).
+  const priceInMinorUnits = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
   return {
     allow_upsert: mode === "update",
     retailer_id: product.retailerId,
@@ -81,8 +85,7 @@ export function catalogProductGraphPayload(product: CatalogProductMutation, mode
     description: product.description,
     availability: product.availability,
     condition: product.condition,
-    // The Graph API mutation expects price as a numeric value and currency separately.
-    price: Number(product.price),
+    price: priceInMinorUnits,
     currency: product.currency,
     brand: product.brand,
     image_url: product.imageUrls[0],

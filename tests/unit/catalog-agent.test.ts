@@ -66,7 +66,7 @@ describe("catálogo Meta del agente (031)", () => {
     expect(catalogProductMutationSchema.safeParse({ ...input, price: "0" }).success).toBe(false);
   });
 
-  it("mapea campos de producto a Meta y solo habilita upsert para una edición", () => {
+  it("mapea el precio a centavos para Meta y solo habilita upsert para una edición", () => {
     const parsed = catalogProductMutationSchema.parse({
       retailerId: "SKU-OLLAS-01",
       name: "Set de ollas",
@@ -89,12 +89,13 @@ describe("catálogo Meta del agente (031)", () => {
     expect(createPayload).toMatchObject({
       allow_upsert: false,
       retailer_id: "SKU-OLLAS-01",
-      price: 309900,
+      price: 30990000,
       currency: "COP",
       image_url: "https://cdn.example.com/olla.jpg",
       additional_image_urls: ["https://cdn.example.com/olla-lateral.jpg"],
       material: "Acero inoxidable",
     });
+    expect(catalogProductGraphPayload({ ...parsed, price: "309900.50" }, "create").price).toBe(30990050);
     expect(updatePayload.allow_upsert).toBe(true);
     expect(createPayload).not.toHaveProperty("catalog_id");
   });

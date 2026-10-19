@@ -22,7 +22,9 @@
   endpoint edita un SKU existente. Ambos requieren sesión, flag activa, campos
   validados y un catálogo sincronizado. Catálogo y token salen de la conexión
   guardada por organización, nunca del navegador. Crear desactiva upsert; editar
-  solo admite identificadores ya presentes en el snapshot.
+  solo admite identificadores ya presentes en el snapshot. El precio del editor
+  se expresa en unidades mayores y se serializa como número en centésimas para
+  la mutación Graph; la moneda se transmite en `currency` por separado.
 - `POST /api/settings/catalog/images` recibe un archivo por petición. Valida
   JPEG/PNG real, hasta 8 MB y dimensiones mínimas de 500×500 px; persiste en
   `MEDIA_DIR` y responde una URL HTTPS firmada. `GET /api/catalog-images` solo
