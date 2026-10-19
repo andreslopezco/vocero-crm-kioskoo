@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 7014)
+Total output lines: 185
+
 # AGENTS.md — Guía de Vocero CRM para agentes y personas
 
 Vocero es un CRM de WhatsApp open source (MIT) y self-hosted: bandeja en tiempo
@@ -27,7 +30,7 @@ de skills, scripts ni plugins de ningún asistente.
 | Tiempo real | SSE en `GET /api/events` sobre un bus in-process (`src/server/events/bus.ts`); sin WebSockets ni colas: el trabajo en segundo plano corre dentro del proceso |
 | UI | Tailwind CSS con tokens en `src/app/globals.css`, tema claro/oscuro, white-label por organización |
 | Pruebas | Vitest (`tests/unit/`) + guiones E2E (`tests/e2e/*.md`) conducidos por `scripts/e2e-*.mjs` (fetch y, algunos, Playwright) contra la app con mocks |
-| Imagen | Docker multi-stage standalone, healthcheck `/api/health`, publicada en `ghcr.io/kevinrivm/vocero-crm:X.Y.Z` por `.github/workflows/imagen.yml` |
+| Imagen | Docker multi-stage standalone, healthcheck `/api/health`; `.github/workflows/imagen.yml` publica releases en `ghcr.io/kevinrivm/vocero-crm:X.Y.Z` y cada push a `staging` en `ghcr.io/<owner>/<repo>:staging` más una etiqueta por commit |
 
 ## Cómo correrlo
 
@@ -101,26 +104,7 @@ Apagada, cada superficie responde 404 (no 403). El despliegue en producción est
 | `whatsapp/` | Credenciales cifradas, prueba de conexión y suscripción del webhook, media, plantillas | `credentials.ts`, `connect.ts`, `media.ts`, `templates.ts` |
 | `zernio/` | Transporte y firma de la API unificada de Zernio; reparte cada evento al canal que toca. 023 — resuelve la cuenta contra `GET /accounts` al guardar, da de alta el webhook limitado a las cuentas de la organización, y verifica la firma contra los secretos guardados y los que Zernio tiene para esta instancia. 030 — el secreto de firma se guarda cifrado, como el token; el arranque cifra el que una versión anterior dejó en claro | `index.ts`, `dispatch.ts`, `cuentas.ts`, `webhooks.ts`, `conexiones.ts`, `guardar.ts`, `secreto-guardado.ts` |
 
-Sueltos: `contacts.ts` (serialización), `contact-source.ts` (fuente del prospecto), `branding.ts` (marca guardada en la organización), `health.ts` (lo que responde `/api/health`: BD, versión, banderas activas, `mediaWritable`), `media-dir.ts` (sondeo de escritura de `MEDIA_DIR`, cacheado 60 s; lo comparten el arranque y el health).
-
-### El resto
-
-| Ruta | Qué hay |
-|---|---|
-| `src/lib/` | Fronteras y utilidades sin estado: `env.ts` (validación lazy), `db/` (`schema.ts`, `tenant.ts` con `scoped()`, `ids.ts` con prefijos `ct_`, `cv_`, `msg_`…), `auth/` (sesión y `roles.ts`: quién configura), `crypto/`, `meta/` (`client.ts` Graph API, `capi.ts`, `destinatario.ts`, `send-errors.ts`), `ai/` (adaptador LLM con `chatJson<T>`; `provider.ts` resuelve con quién habla —la fila de Ajustes → IA y, de respaldo, `OPENROUTER_*`—, `probe.ts` prueba la conexión y lista modelos, `presets.ts` el catálogo), `api.ts` (`withAuth`, `parseBody`, `apiError`), `rate-limit.ts`, `dev-guard.ts`, `version.ts`, catálogos compartidos con la UI (`channels.ts`, `agenda-connectors.ts`, `analytics.ts`, `types.ts`, `nav.ts`: grupos del menú y secciones de Ajustes según banderas y rol), marca y tema (`brand.ts`, `branding.ts`, `theme.ts`, `favicon.ts`), tiempo y dinero (`time/`, `money.ts`) |
-| `src/components/` | React: primitivos en `ui/` (incluido `empty-state.tsx`, el estado vacío común); una carpeta por pantalla (`inbox/`, `pipeline/`, `contacts/`, `agent/`, `lab/`, `results/`, `bookings/`, `onboarding/`, `settings/`); `app-shell.tsx`, `app-nav.tsx`, `use-events.ts` (cliente SSE), `use-theme.ts` |
-| `src/app/(app)/` | Pantallas autenticadas: `onboarding` (guía de inicio: primera pantalla mientras falte un paso o el agente siga apagado; `src/app/page.tsx` decide), `inbox`, `pipeline`, `contacts`, `results`, `agent`, `lab`, `bookings` (AGENDA) y `settings/{whatsapp,branding,templates,team,ai,calendar,ads,messenger,tiktok}`. En `(auth)/`: `login` y `register` |
-| `src/app/api/` | Route handlers: `auth/[...all]` (Better Auth) · `conversations`, `contacts`, `pipeline`, `kb`, `agent`, `lab`, `templates`, `analytics`, `bookings`, `calendar`, `media`, `branding`, `seed`, `onboarding/status` (sesión + organización) · `settings/*` (WhatsApp, webhook, marca, equipo, IA —`ai`, con `ai/test` y `ai/models`—, capi, zoom, google, instagram, messenger, tiktok) · `bot/*` (X-API-Key) · `webhooks/{wa,ig,messenger,tiktok}/[webhookToken]` (públicos) · `events` (SSE) · `health` · `dev/*` (mocks, 404 en producción) |
-| `tests/` | `unit/*.test.ts` (Vitest sin base de datos: módulos puros, guardarraíles que escanean `src/`, contratos) y `e2e/*.md` (guiones por historia con criterios de aceptación) |
-| `scripts/` | `e2e-*.mjs` (arneses de los guiones), `migrate.mjs` (migrador del contenedor), `seed/demo.ts`, `reset-password.mjs` (imprime el `UPDATE`, no toca la BD), `screenshots.mjs` |
-| `drizzle/` | `0000…0020_*.sql` + `meta/` (snapshots y `_journal.json`). Se genera, nunca se edita a mano. A la imagen viajan solo los `.sql` y `_journal.json`: el migrador no abre los snapshots (`.dockerignore`) |
-| `specs/` | Specs por feature (001, 002, 003, 014–030) con sus contratos; `specs/README.md` explica qué hay y qué no |
-| `docs/` | ADR-001/002, `agenda-conectores.md`, `atribucion-capi.md`, capturas del README. (`getting-started.md`, `sdd-workflow.md`, `three-agent-architecture.md` y `mcp-setup.md` describen el starter de Claude Code, no Vocero) |
-
-## Flujo de una petición: un mensaje de WhatsApp
-
-1. Meta hace `POST /api/webhooks/wa/<token>` → `src/app/api/webhooks/wa/[webhookToken]/route.ts`: el segmento debe igualar `META_WEBHOOK_VERIFY_TOKEN` (si no, 404) y la firma HMAC se valida solo si hay `META_APP_SECRET` (`src/server/inbox/webhook.ts`). Responde 200 de inmediato y procesa en `after()`.
-2. `processMessagesValue` en `src/server/inbox/ingest.ts`: credenciales por `phone_number_id` (`whatsapp/credentials.ts`), identidad del remitente (`inbox/identity.ts` → contacto por `wa_identity`), dedup por `wa_message_id`, adjuntos (`whatsapp/media.ts`), anuncio de origen (`attribution/referral.ts` + `store.ts`), lead en la primera etapa (`inbox/lead-activity.ts`) y `publish("message.new")`.
+Sueltos: `contacts.ts` (serialización), `contact-source.ts` (fuente del prospecto), `branding.ts` (marca guard…1014 tokens truncated…s`), lead en la primera etapa (`inbox/lead-activity.ts`) y `publish("message.new")`.
 3. `src/server/ai/trigger.ts` → `scheduleAgentTurn` en `ai/pipeline.ts`: espera `AGENT_COALESCE_MS`, un turno por conversación, arma el prompt (`ai/prompts.ts`), llama a `chatJson` (`src/lib/ai/index.ts`, con el proveedor de Ajustes → IA o, de respaldo, `OPENROUTER_*`; un 401/402 del proveedor pausa la credencial), valida la acción con Zod (`ai/actions.ts`) y la ejecuta: responder, mover etapa (`leads/stage-history.ts`), escalar, ofrecer o reservar cita (`agenda/agent.ts`).
 4. `src/server/inbox/send.ts`: rechaza conversaciones `is_test` (`sandbox_violation`) y ventana cerrada (`window_closed`, `inbox/window.ts`), consulta el canal (`channels/capabilities.ts`), llama a `graphRequest` (`src/lib/meta/client.ts`), persiste el mensaje y publica.
 5. Los `statuses` del webhook pasan por `inbox/status.ts` (nunca degradan) y salen como `message.status`.
@@ -179,7 +163,7 @@ Documentación: README («Trae tu propio agente»), guion `tests/e2e/us-bot-api.
 2. Antes de abrir el PR: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`. El CI (`.github/workflows/ci.yml`) corre esos cuatro gates en dos configuraciones, banderas apagadas y `CHANNELS` + `AGENDA` encendidas; `imagen.yml` construye la imagen Docker en cada PR.
 3. Comportamiento observable nuevo: amplía o escribe su guion en `tests/e2e/` y, si se puede, su arnés en `scripts/e2e-*.mjs`; córrelo contra la app con mocks (`WA_MOCK_ENABLED=true`, `META_GRAPH_BASE_URL` → `/api/dev/wa-mock/graph`, `OPENROUTER_BASE_URL` → `/api/dev/ai-mock`, `BOT_API_KEY`; receta en `specs/001-vocero-core/quickstart.md`). Prueba también el camino infeliz.
 4. Specs (`specs/`): si tocas el modelo de datos o un contrato publicado, ciclo completo en `specs/NNN-nombre/`; comportamiento nuevo sin eso, un `spec.md` ligero; arreglos, refactors y dependencias quedan exentos (Principio VI de la constitución).
-5. Versión y release: sube `version` en `package.json`, el default de `VOCERO_CRM_VERSION` en `docker-compose.yml` (`tests/unit/version.test.ts` exige que coincidan) y la etiqueta de la imagen en `render.yaml`, `fly.toml` y `railway.toml` (`tests/unit/manifests-plataformas.test.ts`), añade la entrada en `CHANGELOG.md` con su «Actualizar desde…» y actualiza la etiqueta de la imagen en `INSTALL-IA.md`. El tag `vX.Y.Z` publica la imagen.
+5. Versión y release: sube `version` en `package.json`, el default de `VOCERO_CRM_VERSION` en `docker-compose.yml` (`tests/unit/version.test.ts` exige que coincidan) y la etiqueta de la imagen en `render.yaml`, `fly.toml` y `railway.toml` (`tests/unit/manifests-plataformas.test.ts`), añade la entrada en `CHANGELOG.md` con su «Actualizar desde…» y actualiza la etiqueta de la imagen en `INSTALL-IA.md`. El tag `vX.Y.Z` publica la imagen de versión; cada push a `staging` también publica la imagen mutable para ese entorno.
 6. Dependencias: `pnpm install --frozen-lockfile` debe pasar; un tercero nuevo en el núcleo necesita justificación constitucional (Principio II).
 
 Las instrucciones específicas de Claude Code están en `CLAUDE.md`.
