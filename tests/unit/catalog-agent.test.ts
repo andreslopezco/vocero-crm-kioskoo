@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { agentActionSchema, agentActionSchemaFor } from "@/server/ai/actions";
 import { buildAgentSystemPrompt } from "@/server/ai/prompts";
 import { parseCatalogFlag } from "@/server/catalog/flag";
-import { resolveInStockProducts, type CatalogSnapshot } from "@/server/catalog/service";
+import { catalogProductMutationSchema } from "@/server/catalog/input";
+import { catalogProductGraphPayload, resolveInStockProducts, type CatalogSnapshot } from "@/server/catalog/service";
 import { catalogContextForTurn, catalogProductsText } from "@/server/catalog/context";
 
 const product = {
@@ -37,6 +38,63 @@ const profile = {
 } as Parameters<typeof buildAgentSystemPrompt>[0]["profile"];
 
 describe("catálogo Meta del agente (031)", () => {
+  it("valida los campos para crear/editar y normaliza moneda, sin aceptar URLs inseguras", () => {
+    const input = {
+      retailerId: "SKU-OLLAS-01",
+      name: "Set de ollas",
+      description: "Acero inoxidable",
+      availability: "in stock",
+      condition: "new",
+      price: "309900",
+      currency: "cop",
+      brand: "Keha",
+      imageUrl: "https://cdn.example.com/olla.jpg",
+      url: "https://tienda.example.com/olla",
+      category: "Hogar",
+      material: "Acero inoxidable",
+      color: "Plateado",
+      size: "5 y 7 litros",
+      pattern: "",
+    };
+    const parsed = catalogProductMutationSchema.safeParse(input);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.currency).toBe("COP");
+    expect(catalogProductMutationSchema.safeParse({ ...input, imageUrl: "http://cdn.example.com/olla.jpg" }).success).toBe(false);
+    expect(catalogProductMutationSchema.safeParse({ ...input, url: "https://user:password@tienda.example.com" }).success).toBe(false);
+    expect(catalogProductMutationSchema.safeParse({ ...input, price: "0" }).success).toBe(false);
+  });
+
+  it("mapea campos de producto a Meta y solo habilita upsert para una edición", () => {
+    const parsed = catalogProductMutationSchema.parse({
+      retailerId: "SKU-OLLAS-01",
+      name: "Set de ollas",
+      description: "Acero inoxidable",
+      availability: "in stock",
+      condition: "new",
+      price: "309900",
+      currency: "COP",
+      brand: "Keha",
+      imageUrl: "https://cdn.example.com/olla.jpg",
+      url: "https://tienda.example.com/olla",
+      category: "Hogar",
+      material: "Acero inoxidable",
+      color: "Plateado",
+      size: "5 y 7 litros",
+      pattern: "",
+    });
+    const createPayload = catalogProductGraphPayload(parsed, "create");
+    const updatePayload = catalogProductGraphPayload(parsed, "update");
+    expect(createPayload).toMatchObject({
+      allow_upsert: false,
+      retailer_id: "SKU-OLLAS-01",
+      price: "309900 COP",
+      image_url: "https://cdn.example.com/olla.jpg",
+      material: "Acero inoxidable",
+    });
+    expect(updatePayload.allow_upsert).toBe(true);
+    expect(createPayload).not.toHaveProperty("catalog_id");
+  });
+
   it("la bandera está apagada por omisión y solo acepta valores explícitos", () => {
     expect(parseCatalogFlag(undefined)).toBe(false);
     expect(parseCatalogFlag("off")).toBe(false);

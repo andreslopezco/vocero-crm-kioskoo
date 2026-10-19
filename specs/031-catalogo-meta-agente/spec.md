@@ -11,7 +11,7 @@ Permitir que el agente incluido responda con datos verificables del catálogo
 Meta vinculado a la WABA del número conectado y, cuando sea pertinente, envíe
 productos por formatos nativos de WhatsApp o como fichas de texto en otros
 canales. La fuente de catálogo es Meta; no se permite elegir un catálogo
-arbitrario ni convertir el CRM en un editor de inventario.
+arbitrario ni mantener una copia de inventario independiente.
 
 ## Decisiones
 
@@ -25,6 +25,11 @@ arbitrario ni convertir el CRM en un editor de inventario.
   catálogo y `product_retailer_id` únicos por organización. Conservar campos
   Meta relevantes sin descartar atributos adicionales. Solo una sincronización
   completa exitosa reemplaza el snapshot publicado.
+- **Edición desde el panel**: crear y editar productos directamente en el
+  catálogo vinculado de Meta, identificando cada producto por `retailer_id`.
+  La copia local se resincroniza tras una escritura aceptada. Crear no puede
+  sobrescribir un SKU existente; editar no puede crear un SKU ausente. No se
+  ofrece borrado ni edición masiva.
 - **Contexto acotado**: el agente recibe hasta 25 productos en stock por turno,
   ordenados por coincidencia léxica con el mensaje más reciente; el snapshot
   completo se conserva en la base y el servidor valida contra él al enviar.
@@ -45,8 +50,8 @@ arbitrario ni convertir el CRM en un editor de inventario.
   `type=interactive`, `interactive.type=product_list`. Se intenta solo por
   WhatsApp y dentro de la ventana vigente. Si Meta rechaza el formato, el agente
   envía texto con los datos verificados y adjunta las imágenes HTTPS disponibles.
-  Otros canales (incluido TikTok) reciben una ficha de texto con enlace a la
-  imagen y al producto cuando estén disponibles. El Laboratorio persiste una
+  Otros canales (incluido TikTok) reciben una ficha de texto sin enlaces de
+  imagen ni producto. El Laboratorio persiste una
   simulación y jamás llama Meta. No se crea reserva, carrito ni orden.
 - **Compatibilidad**: no se cambian `/api/bot/*` ni despacho 021/025; `/api/health`
   gana el campo aditivo `features.catalogo` para reflejar la bandera. El módulo
@@ -58,7 +63,7 @@ arbitrario ni convertir el CRM en un editor de inventario.
 ### A. Vincular y consultar el catálogo (P1)
 
 - La pantalla de WhatsApp muestra el catálogo vinculado solo con módulo activo.
-- El menú principal muestra una página «Catálogo» solo con módulo activo; permite consultar el snapshot sincronizado, buscar productos y revisar sus atributos sin editar ni publicar el inventario.
+- El menú principal muestra una página «Catálogo» solo con módulo activo; permite consultar y buscar el snapshot sincronizado, crear productos y editar los existentes directamente en Meta.
 - Sin catálogo o sin permisos, se informa el motivo sin desconectar WhatsApp.
 - Sincronizar trae productos paginados desde Meta; errores y paginación
   incompleta nunca reemplazan el snapshot vigente.
@@ -66,6 +71,11 @@ arbitrario ni convertir el CRM en un editor de inventario.
   imagen, URL e identificador minorista quedan disponibles en el CRM.
 - Cada organización solo lee y modifica su snapshot; desconectar WhatsApp
   elimina el snapshot asociado.
+- Crear y editar usan el catálogo vinculado descubierto en servidor; requieren
+  SKU, nombre, descripción, disponibilidad, condición, precio/moneda e imagen
+  y URL HTTPS. El SKU es inmutable tras la creación.
+- Si Meta acepta una escritura pero falla la resincronización, la UI informa
+  que el cambio quedó guardado y permite sincronizar de nuevo.
 
 ### B. Responder sobre productos (P1)
 
@@ -104,6 +114,6 @@ arbitrario ni convertir el CRM en un editor de inventario.
 
 ## Fuera de alcance
 
-Edición/publicación del catálogo, gestión de inventario, reservas, pago,
+Eliminación y edición masiva del catálogo, gestión de inventario, reservas, pago,
 checkout, creación de pedidos, búsquedas semánticas/vectoriales, sincronización
 cron, envío de carruseles/promociones y soporte a un cerebro externo.

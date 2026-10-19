@@ -49,9 +49,108 @@ export type CatalogSnapshot = {
 };
 
 export class CatalogError extends Error {
-  constructor(message: string, readonly code: "not_connected" | "no_catalog" | "meta_unavailable" | "meta_error") {
+  constructor(message: string, readonly code: "not_connected" | "no_catalog" | "meta_unavailable" | "meta_error" | "product_exists" | "product_not_found") {
     super(message);
     this.name = "CatalogError";
+  }
+}
+
+export type CatalogProductMutation = {
+  retailerId: string;
+  name: string;
+  description: string;
+  availability: "in stock" | "out of stock" | "preorder";
+  condition: "new" | "refurbished" | "used";
+  price: string;
+  currency: string;
+  brand: string;
+  imageUrl: string;
+  url: string;
+  category: string;
+  material: string;
+  color: string;
+  size: string;
+  pattern: string;
+};
+
+export function catalogProductGraphPayload(product: CatalogProductMutation, mode: "create" | "update") {
+  return {
+    allow_upsert: mode === "update",
+    retailer_id: product.retailerId,
+    name: product.name,
+    description: product.description,
+    availability: product.availability,
+    condition: product.condition,
+    price: `${product.price} ${product.currency}`,
+    brand: product.brand,
+    image_url: product.imageUrl,
+    url: product.url,
+    category: product.category,
+    material: product.material,
+    color: product.color,
+    size: product.size,
+    pattern: product.pattern,
+  };
+}
+
+/**
+ * Crea o actualiza un producto en el único catálogo asociado a la WABA.
+ * La clave retailer_id se valida contra el snapshot antes de tocar Meta para
+ * que un formulario manipulado no convierta una edición en una creación.
+ */
+export async function saveCatalogProduct(
+  organizationId: string,
+  product: CatalogProductMutation,
+  mode: "create" | "update"
+): Promise<{ synced: boolean }> {
+  const [credentials, snapshot] = await Promise.all([
+    getCredentialsByOrg(organizationId),
+    getCatalogSnapshot(organizationId),
+  ]);
+  if (!credentials || credentials.status !== "connected") {
+    throw new CatalogError("Conecta o reconecta WhatsApp antes de editar el catálogo", "not_connected");
+  }
+  if (!snapshot) {
+    throw new CatalogError("Sincroniza primero el catálogo vinculado a WhatsApp", "no_catalog");
+  }
+  const existing = snapshot.products.some((item) => item.retailerId === product.retailerId);
+  if (mode === "create" && existing) {
+    throw new CatalogError("Ya existe un producto con ese identificador", "product_exists");
+  }
+  if (mode === "update" && !existing) {
+    throw new CatalogError("No se encontró el producto en el catálogo sincronizado; vuelve a sincronizar", "product_not_found");
+  }
+
+  try {
+    await graphRequest<{ id?: string }>(`${snapshot.catalogId}/products`, {
+      method: "POST",
+      token: credentials.token,
+      body: catalogProductGraphPayload(product, mode),
+    });
+  } catch (err) {
+    if (err instanceof MetaApiError && err.isAuthError) {
+      await markReconnectRequired(organizationId);
+    }
+    if (err instanceof MetaApiError && (err.status === 0 || err.status >= 500)) {
+      throw new CatalogError("Meta no está disponible ahora; el producto no se pudo guardar", "meta_unavailable");
+    }
+    if (err instanceof MetaApiError) {
+      throw new CatalogError(`Meta rechazó los datos del producto: ${err.message}`, "meta_error");
+    }
+    throw err;
+  }
+
+  // Si había una lectura iniciada antes del cambio, se espera a que termine
+  // antes de consultar a Meta nuevamente y publicar un snapshot posterior.
+  const pending = inFlight.get(organizationId);
+  if (pending) await pending.catch(() => undefined);
+  try {
+    await syncCatalog(organizationId);
+    return { synced: true };
+  } catch {
+    // El cambio ya fue aceptado por Meta: no informamos un falso fallo que
+    // anime a duplicar la operación; la UI puede volver a sincronizar.
+    return { synced: false };
   }
 }
 

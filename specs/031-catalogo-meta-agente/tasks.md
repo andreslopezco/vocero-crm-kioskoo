@@ -6,6 +6,7 @@
 - [x] Paginar Meta, validar registros básicos y guardar snapshot atómico.
 - [x] Mostrar catálogo y sincronización en Ajustes → WhatsApp.
 - [x] Añadir página de consulta del snapshot en el menú, con búsqueda y atributos publicados.
+- [x] Crear y editar productos en Meta desde la página del catálogo; resincronizar el snapshot después de guardar.
 - [x] Enriquecer el contexto del agente y agregar acción validada de producto.
 - [x] Enviar producto/lista con el transporte de WhatsApp existente.
 - [x] Fallback del agente a fichas de texto en canales sin tarjeta y a texto más imágenes en WhatsApp si falla el formato nativo.

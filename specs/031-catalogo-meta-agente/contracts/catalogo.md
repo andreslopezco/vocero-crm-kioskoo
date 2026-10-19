@@ -18,6 +18,11 @@
 - `POST /api/settings/catalog` — sincronización manual del snapshot. Requiere
   sesión autenticada, scoped a organización. Error de acceso/configuración: 422,
   sin conexión: 409, Meta no disponible: 503.
+- `POST /api/settings/catalog/products` crea un producto y `PUT` al mismo
+  endpoint edita un SKU existente. Ambos requieren sesión, flag activa, campos
+  validados y un catálogo sincronizado. Catálogo y token salen de la conexión
+  guardada por organización, nunca del navegador. Crear desactiva upsert; editar
+  solo admite identificadores ya presentes en el snapshot.
 - Flag `KIOSKOO_CATALOGO`; el prompt del agente no menciona catálogo cuando la
   flag está apagada. Encendida, describe la función incluso si no hay snapshot;
   la acción `send_products` se añade solo si existe snapshot fresco.
@@ -42,9 +47,10 @@ En WhatsApp la acción intenta primero el formato nativo, tras la prevalidación
 existente de destino, ventana y credenciales. Si falla, se envía una ficha de
 texto y luego las imágenes HTTPS presentes en el snapshot. En otros canales no
 se intenta tarjeta: se envían únicamente los datos comerciales como texto, sin
-exponer URLs de imagen/producto. Las imágenes externas se guardan como referencias de medio para previsualizar
-en el hilo, no se descargan a almacenamiento propio. Laboratorio persiste una
-simulación y no ejecuta ninguna solicitud Graph.
+exponer URLs de imagen/producto. Las imágenes externas se guardan como
+referencias de medio para previsualizar en el hilo, no se descargan a
+almacenamiento propio. Laboratorio persiste una simulación y no ejecuta ninguna
+solicitud Graph.
 
 La ficha textual y el prompt solo incluyen atributos comerciales en español
 (marca, precio, descripción, categoría, condición, material, tamaño, color,
