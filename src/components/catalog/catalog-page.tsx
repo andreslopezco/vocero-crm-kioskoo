@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, Image as ImageIcon, PackageSearch, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ChevronDown, Image as ImageIcon, PackageSearch, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -226,6 +226,16 @@ export function CatalogPage() {
       ...current,
       imageUrls: [current.imageUrls[index]!, ...current.imageUrls.filter((_, itemIndex) => itemIndex !== index)],
     }));
+  }
+
+  function moveProductImage(index: number, direction: -1 | 1) {
+    setForm((current) => {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= current.imageUrls.length) return current;
+      const imageUrls = [...current.imageUrls];
+      [imageUrls[index], imageUrls[targetIndex]] = [imageUrls[targetIndex]!, imageUrls[index]!];
+      return { ...current, imageUrls };
+    });
   }
 
   function removeProductImage(index: number) {
@@ -488,6 +498,8 @@ export function CatalogPage() {
                     {index === 0 && <span className="absolute left-1 top-1 rounded bg-card/90 px-1.5 py-0.5 text-[10px] font-semibold">Principal</span>}
                   </div>
                   <div className="flex gap-1 p-1.5">
+                    <Button type="button" size="sm" variant="ghost" className="h-7 w-7 shrink-0 p-0" aria-label={`Mover foto ${index + 1} hacia arriba`} title="Mover hacia arriba" disabled={saving || uploadingImages || index === 0} onClick={() => moveProductImage(index, -1)}><ArrowUp className="h-3.5 w-3.5" /></Button>
+                    <Button type="button" size="sm" variant="ghost" className="h-7 w-7 shrink-0 p-0" aria-label={`Mover foto ${index + 1} hacia abajo`} title="Mover hacia abajo" disabled={saving || uploadingImages || index === form.imageUrls.length - 1} onClick={() => moveProductImage(index, 1)}><ArrowDown className="h-3.5 w-3.5" /></Button>
                     {index > 0 && <Button type="button" size="sm" variant="ghost" className="h-7 flex-1 px-1 text-[10px]" disabled={saving || uploadingImages} onClick={() => makePrimaryImage(index)}>Hacer principal</Button>}
                     <Button type="button" size="sm" variant="ghost" className="h-7 flex-1 px-1 text-[10px] text-danger-text" disabled={saving || uploadingImages || form.imageUrls.length <= 1} onClick={() => removeProductImage(index)}>Quitar</Button>
                   </div>

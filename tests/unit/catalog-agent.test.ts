@@ -76,7 +76,11 @@ describe("catálogo Meta del agente (031)", () => {
       price: "309900",
       currency: "COP",
       brand: "Keha",
-      imageUrls: ["https://cdn.example.com/olla.jpg", "https://cdn.example.com/olla-lateral.jpg"],
+      imageUrls: [
+        "https://cdn.example.com/olla.jpg",
+        "https://cdn.example.com/olla-lateral.jpg",
+        "https://cdn.example.com/olla-detalle.jpg",
+      ],
       url: "https://tienda.example.com/olla",
       category: "Hogar",
       material: "Acero inoxidable",
@@ -92,7 +96,7 @@ describe("catálogo Meta del agente (031)", () => {
       price: 30990000,
       currency: "COP",
       image_url: "https://cdn.example.com/olla.jpg",
-      additional_image_urls: ["https://cdn.example.com/olla-lateral.jpg"],
+      additional_image_urls: ["https://cdn.example.com/olla-lateral.jpg", "https://cdn.example.com/olla-detalle.jpg"],
       material: "Acero inoxidable",
     });
     expect(catalogProductGraphPayload({ ...parsed, price: "309900.50" }, "create").price).toBe(30990050);

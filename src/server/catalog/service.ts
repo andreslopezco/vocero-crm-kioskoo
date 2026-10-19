@@ -20,7 +20,7 @@ const PRODUCT_FIELDS = [
   "custom_number_3", "custom_number_4", "retailer_product_group_id", "status",
   "tags", "visibility", "shipping_weight_value", "shipping_weight_unit",
   "short_description", "rich_text_description", "additional_image_urls",
-  "additional_variant_attributes", "videos", "wa_compliance_category", "vendor_id",
+  "additional_variant_attributes", "image_fetch_status", "videos", "wa_compliance_category", "vendor_id",
 ].join(",");
 
 type MetaProduct = {
