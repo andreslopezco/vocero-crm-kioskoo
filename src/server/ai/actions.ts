@@ -60,10 +60,20 @@ const catalogActions = [
   }),
 ] as const;
 
+const dropiActions = [
+  z.object({
+    action: z.literal("create_dropi_order"),
+    payload: z.record(z.unknown()),
+    ficha: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+    reply: z.string().optional(),
+  }),
+] as const;
+
 export const AgentAction = z.discriminatedUnion("action", [
   ...baseActions,
   ...agendaActions,
   ...catalogActions,
+  ...dropiActions,
 ]);
 
 /** El esquema que se le exige al modelo en ESTE turno. */
@@ -71,10 +81,14 @@ export function agentActionSchema(agenda: boolean) {
   return agentActionSchemaFor(agenda, false);
 }
 
-export function agentActionSchemaFor(agenda: boolean, catalog: boolean) {
-  if (agenda && catalog) return AgentAction;
+export function agentActionSchemaFor(agenda: boolean, catalog: boolean, dropi = false) {
+  if (agenda && catalog && dropi) return AgentAction;
+  if (agenda && catalog) return z.discriminatedUnion("action", [...baseActions, ...agendaActions, ...catalogActions]);
+  if (agenda && dropi) return z.discriminatedUnion("action", [...baseActions, ...agendaActions, ...dropiActions]);
+  if (catalog && dropi) return z.discriminatedUnion("action", [...baseActions, ...catalogActions, ...dropiActions]);
   if (agenda) return z.discriminatedUnion("action", [...baseActions, ...agendaActions]);
-  if (catalog) return z.discriminatedUnion("action", [...baseActions, ...catalogActions]);
+  if (catalog) return z.discriminatedUnion("action", [...baseActions, ...catalogActions, ...(dropi ? dropiActions : [])]);
+  if (dropi) return z.discriminatedUnion("action", [...baseActions, ...dropiActions]);
   return z.discriminatedUnion("action", [...baseActions]);
 }
 
@@ -106,6 +120,9 @@ export function degradeAction(action: AgentActionType): AgentActionType {
       : { action: "none" };
   }
   if (action.action === "send_products") {
+    return action.reply ? { action: "reply", text: action.reply } : { action: "none" };
+  }
+  if (action.action === "create_dropi_order") {
     return action.reply ? { action: "reply", text: action.reply } : { action: "none" };
   }
   return action;

@@ -1,0 +1,107 @@
+import {
+  Client,
+  StreamableHTTPClientTransport,
+  UnauthorizedError,
+  type CallToolResult,
+  type Tool,
+} from "@modelcontextprotocol/client";
+import { dropiConfig } from "./config";
+import { createDropiOAuthFlow, getDropiFlowById, saveDropiToolSnapshot, consumeDropiFlowByState } from "./credentials";
+import { DropiOAuthProvider } from "./oauth-provider";
+
+function clientFor(provider: DropiOAuthProvider) {
+  const client = new Client({ name: "vocero-crm", version: "1.6.0" }, { versionNegotiation: { mode: "legacy" } });
+  const transport = new StreamableHTTPClientTransport(dropiConfig().mcpUrl, {
+    authProvider: provider,
+    skipIssuerMetadataValidation: dropiConfig().skipIssuerMetadataValidation,
+    redirectPolicy: "same-origin",
+  });
+  return { client, transport };
+}
+
+export async function beginDropiAuthorization(organizationId: string, userId: string) {
+  const flow = await createDropiOAuthFlow(organizationId, userId);
+  const provider = new DropiOAuthProvider(flow.id, organizationId);
+  const { client, transport } = clientFor(provider);
+  try {
+    await client.connect(transport);
+    return { connected: true } as const;
+  } catch (error) {
+    if (provider.authorizationUrl && UnauthorizedError.isInstance(error)) {
+      return { connected: false, authorizationUrl: provider.authorizationUrl.toString() } as const;
+    }
+    throw error;
+  } finally {
+    await client.close().catch(() => undefined);
+  }
+}
+
+export async function completeDropiAuthorization(organizationId: string, userId: string, callback: URLSearchParams) {
+  const state = callback.get("state");
+  if (!state) throw new Error("Dropi no devolvió el estado OAuth.");
+  const flowRow = await import("@/lib/db").then(async ({ getDb, schema }) => {
+    const { eq, and, gt, isNull } = await import("drizzle-orm");
+    const { createHash } = await import("node:crypto");
+    const digest = createHash("sha256").update(state).digest("hex");
+    const rows = await getDb().select().from(schema.dropiOAuthFlow).where(and(
+      eq(schema.dropiOAuthFlow.stateHash, digest),
+      eq(schema.dropiOAuthFlow.organizationId, organizationId),
+      eq(schema.dropiOAuthFlow.actorUserId, userId),
+      isNull(schema.dropiOAuthFlow.consumedAt),
+      gt(schema.dropiOAuthFlow.expiresAt, new Date())
+    )).limit(1);
+    return rows[0] ?? null;
+  });
+  if (!flowRow) throw new Error("La autorización Dropi expiró o no pertenece a este usuario.");
+  const flow = await getDropiFlowById(flowRow.id, organizationId);
+  if (!flow || flow.state !== state) throw new Error("El estado de autorización de Dropi no coincide.");
+  const provider = new DropiOAuthProvider(flowRow.id, organizationId);
+  const transport = new StreamableHTTPClientTransport(dropiConfig().mcpUrl, {
+    authProvider: provider,
+    skipIssuerMetadataValidation: dropiConfig().skipIssuerMetadataValidation,
+    redirectPolicy: "same-origin",
+  });
+  try {
+    await transport.finishAuth(callback);
+    const client = new Client({ name: "vocero-crm", version: "1.6.0" }, { versionNegotiation: { mode: "legacy" } });
+    await client.connect(transport);
+    const listed = await client.listTools();
+    const names = new Set(listed.tools.map((tool) => tool.name));
+    if (!names.has("create_order") || !names.has("get_order")) {
+      throw new Error("El MCP Dropi no ofrece las herramientas necesarias para crear y verificar pedidos.");
+    }
+    await provider.persistToOrganization();
+    await saveDropiToolSnapshot(organizationId, listed.tools.map((tool) => ({
+      name: tool.name, description: tool.description, inputSchema: tool.inputSchema, annotations: tool.annotations,
+    })));
+    await client.close().catch(() => undefined);
+    await consumeDropiFlowByState(flowRow.id, organizationId, userId, state);
+    return listed.tools.map((tool) => tool.name);
+  } finally {
+    await transport.close().catch(() => undefined);
+  }
+}
+
+export async function listDropiTools(organizationId: string): Promise<Tool[]> {
+  return withDropiClient(organizationId, async (client) => (await client.listTools()).tools);
+}
+
+export async function callDropiTool(organizationId: string, name: string, args: Record<string, unknown>): Promise<CallToolResult> {
+  const tools = await listDropiTools(organizationId);
+  if (!tools.some((tool) => tool.name === name)) throw new Error(`Dropi no expone la herramienta ${name}.`);
+  return withDropiClient(organizationId, (client) => client.callTool({ name, arguments: args }));
+}
+
+async function withDropiClient<T>(organizationId: string, task: (client: Client) => Promise<T>): Promise<T> {
+  const row = await import("@/server/dropi/credentials").then((m) => m.getDropiConnection(organizationId));
+  if (!row) throw new Error("Dropi no está conectado.");
+  const provider = new DropiOAuthProvider("", organizationId);
+  const { client, transport } = clientFor(provider);
+  try {
+    await client.connect(transport);
+    return await task(client);
+  } finally {
+    await client.close().catch(() => undefined);
+    await transport.close().catch(() => undefined);
+  }
+}

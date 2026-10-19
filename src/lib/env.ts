@@ -40,6 +40,11 @@ export const envSchema = z.object({
   ATRIBUCION: z.string().optional(),
   // 031: catálogo Meta en el agente incluido. Apagado por defecto.
   KIOSKOO_CATALOGO: z.string().optional(),
+  // 033: MCP de Dropi para preparar pedidos. Apagado por defecto.
+  DROPI_ORDERS: z.string().optional(),
+  DROPI_MCP_URL: z.string().url().default("https://mcp.dropi.co/mcp"),
+  // Excepción exacta para el issuer inconsistente publicado por Dropi.
+  DROPI_OAUTH_ALLOW_ISSUER_MISMATCH: z.string().optional(),
   // 015: bases de los conectores. Solo se sobreescriben para apuntar a los
   // mocks en el self-test; en producción se usan las reales.
   ZOOM_BASE_URL: z.string().url().default("https://api.zoom.us/v2"),

@@ -40,6 +40,8 @@ import {
   catalogProductsIntro,
   catalogProductsText,
 } from "@/server/catalog/context";
+import { dropiOrdersEnabled } from "@/server/dropi/flag";
+import { createPendingOrder, dropiPromptContext, DropiOrderError } from "@/server/dropi/orders";
 
 /**
  * Turno del agente (FR-021..FR-025).
@@ -289,6 +291,9 @@ export async function runAgentTurn(
     return leido;
   }
   const catalogContext = catalog ? catalogContextForTurn(catalog, lastInbound.text ?? "") : null;
+  const dropi = !conversation.isTest && dropiOrdersEnabled()
+    ? await dropiPromptContext(organizationId, history.filter((m) => m.direction === "in").slice(-5).map((m) => m.text ?? "").join("\n"))
+    : null;
 
   /**
    * 015 — Los huecos vigentes, con su instante exacto.
@@ -316,7 +321,7 @@ export async function runAgentTurn(
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: buildAgentSystemPrompt({ profile, kb, stages, agenda, catalogEnabled: catalogIsEnabled, channel: conversation.channel, catalog: catalogContext, catalogCategories, contactFicha }),
+      content: buildAgentSystemPrompt({ profile, kb, stages, agenda, catalogEnabled: catalogIsEnabled, channel: conversation.channel, catalog: catalogContext, catalogCategories, contactFicha, dropi }),
     },
     ...history
       .filter((m) => m.text)
@@ -335,7 +340,7 @@ export async function runAgentTurn(
     { role: "system", content: TURN_FORMAT_REMINDER },
   ];
 
-  const result = await chatJson(agentActionSchemaFor(agenda, Boolean(catalog)), messages, {
+  const result = await chatJson(agentActionSchemaFor(agenda, Boolean(catalog), Boolean(dropi?.orderCreationEnabled && dropi.rateType)), messages, {
     organizationId,
   });
   if (!result.ok) {
@@ -347,6 +352,43 @@ export async function runAgentTurn(
   }
 
   let action: AgentActionType = result.data;
+
+  if (action.action === "create_dropi_order") {
+    if (conversation.isTest || !dropi?.orderCreationEnabled || !dropi.rateType) {
+      action = degradeAction(action);
+    } else {
+      try {
+        const created = await createPendingOrder({
+          organizationId, conversationId, contactId: conversation.contactId,
+          isTest: conversation.isTest, payload: action.payload, ficha: action.ficha,
+        });
+        if (action.ficha && Object.keys(action.ficha).length) {
+          await upsertFicha({ organizationId, contactId: conversation.contactId, ficha: action.ficha as FichaInput });
+        }
+        await appendLeadNote(organizationId, conversation.contactId,
+          `Pedido Dropi ${created.orderId ?? "creado"}; estado: ${created.status ?? "sin estado verificable"}. Revisar los datos manualmente.`);
+        const handoffMessage = created.readyForHumanReview
+          ? "Gracias, ya tengo la información. El equipo revisará los datos y la disponibilidad y te dará una respuesta por aquí."
+          : "Gracias, ya tengo la información. El equipo revisará el caso directamente y te dará una respuesta por aquí.";
+        await deliverReply(conversation, handoffMessage);
+        await applyHandoff(conversationId, organizationId, "modelo");
+        publish(organizationId, { type: "conversation.updated", data: { conversation: { id: conversationId } } });
+        return leido;
+      } catch (error) {
+        console.error("[dropi] pedido derivado a revisión", error instanceof Error ? error.message : "unknown");
+        if (error instanceof DropiOrderError && error.code === "missing_fields" && action.reply) {
+          await deliverReply(conversation, action.reply);
+          return leido;
+        }
+        await appendLeadNote(organizationId, conversation.contactId,
+          "No se pudo confirmar el resultado de una solicitud de pedido Dropi. Revisar Dropi antes de crear otro.");
+        await deliverReply(conversation,
+          "Gracias por la información. Voy a pasarla con el equipo para que la revise y te confirme los siguientes pasos.");
+        await applyHandoff(conversationId, organizationId, "modelo");
+        return leido;
+      }
+    }
+  }
 
   if (action.action === "send_products") {
     if (!catalog) {
