@@ -61,6 +61,7 @@ export type CatalogProductMutation = {
   description: string;
   availability: "in stock" | "out of stock" | "preorder";
   condition: "new" | "refurbished" | "used";
+  inventory?: string;
   price: string;
   currency: string;
   brand: string;
@@ -84,6 +85,9 @@ export function catalogProductGraphPayload(product: CatalogProductMutation, mode
     description: product.description,
     availability: product.availability,
     condition: product.condition,
+    ...(product.inventory !== undefined && product.inventory !== ""
+      ? { quantity_to_sell_on_facebook: Number(product.inventory) }
+      : {}),
     price: priceInMinorUnits,
     currency: product.currency,
     brand: product.brand,

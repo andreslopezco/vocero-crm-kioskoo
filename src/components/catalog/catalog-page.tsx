@@ -29,6 +29,7 @@ type ProductForm = {
   description: string;
   availability: "" | "in stock" | "out of stock" | "preorder";
   condition: "" | "new" | "refurbished" | "used";
+  inventory: string;
   price: string;
   currency: string;
   brand: string;
@@ -43,6 +44,7 @@ type ProductEditor = { mode: "create" | "edit"; product?: Product };
 
 const EMPTY_FORM: ProductForm = {
   retailerId: "", name: "", description: "", availability: "", condition: "",
+  inventory: "",
   price: "", currency: "", brand: "", url: "", category: "",
   material: "", color: "", size: "", pattern: "",
 };
@@ -69,6 +71,7 @@ function formFromProduct(product: Product): ProductForm {
     description: product.description ?? "",
     availability: product.availability === "in stock" || product.availability === "out of stock" || product.availability === "preorder" ? product.availability : "",
     condition: product.attributes.condition === "new" || product.attributes.condition === "used" || product.attributes.condition === "refurbished" ? product.attributes.condition : "",
+    inventory: value("quantity_to_sell_on_facebook") || value("inventory"),
     price,
     currency,
     brand: product.brand ?? "",
@@ -94,7 +97,7 @@ function showValue(value: unknown): string {
 const DETAIL_LABELS: Record<string, string> = {
   status: "Estado en Meta",
   condition: "Condición",
-  inventory: "Unidades disponibles",
+  inventory: "Unidades en inventario (Meta)",
   material: "Material",
   color: "Color",
   size: "Tamaño",
@@ -122,7 +125,9 @@ function productDetails(product: Product): Array<{ label: string; value: string 
   const attributes = product.attributes;
 
   for (const [key, label] of Object.entries(DETAIL_LABELS)) {
-    const raw = attributes[key];
+    const raw = key === "inventory"
+      ? attributes.quantity_to_sell_on_facebook ?? attributes.inventory
+      : attributes[key];
     if (raw == null || typeof raw === "object" || raw === "") continue;
     if (key !== "inventory" && (raw === 0 || raw === "0")) continue;
 
@@ -463,6 +468,11 @@ export function CatalogPage() {
                   <option value="refurbished">Reacondicionado</option>
                   <option value="used">Usado</option>
                 </select>
+              </label>
+              <label className="space-y-1.5 text-sm font-medium">
+                <FieldLabel>Unidades en inventario (Meta)</FieldLabel>
+                <Input inputMode="numeric" pattern="[0-9]*" value={form.inventory} disabled={saving} onChange={(event) => setForm({ ...form, inventory: event.target.value })} placeholder="Unidades en inventario (Meta)" />
+                <span className="block text-xs font-normal text-text-3">Se guarda en el catálogo de Meta. Es distinto de marcarlo como disponible o agotado.</span>
               </label>
               <label className="space-y-1.5 text-sm font-medium">
                 <FieldLabel>Marca</FieldLabel>

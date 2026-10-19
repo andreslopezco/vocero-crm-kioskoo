@@ -15,6 +15,7 @@ export const catalogProductMutationSchema = z.object({
   description: z.string().trim().min(1).max(5000),
   availability: z.enum(["in stock", "out of stock", "preorder"]),
   condition: z.enum(["new", "refurbished", "used"]),
+  inventory: z.string().trim().regex(/^\d+$/, "Usa un número entero de unidades").optional().or(z.literal("")),
   price: z.string().trim().regex(/^\d+(?:\.\d{1,2})?$/, "Usa un precio numérico sin separadores de miles")
     .refine((value) => Number(value) > 0, "El precio debe ser mayor a cero"),
   currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()),

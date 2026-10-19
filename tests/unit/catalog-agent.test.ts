@@ -46,6 +46,7 @@ describe("catálogo Meta del agente (031)", () => {
       description: "Acero inoxidable",
       availability: "in stock",
       condition: "new",
+      inventory: "100",
       price: "309900",
       currency: "cop",
       brand: "Keha",
@@ -71,6 +72,7 @@ describe("catálogo Meta del agente (031)", () => {
       description: "Acero inoxidable",
       availability: "in stock",
       condition: "new",
+      inventory: "100",
       price: "309900",
       currency: "COP",
       brand: "Keha",
@@ -89,6 +91,7 @@ describe("catálogo Meta del agente (031)", () => {
       price: 30990000,
       currency: "COP",
       material: "Acero inoxidable",
+      quantity_to_sell_on_facebook: 100,
     });
     expect(createPayload).not.toHaveProperty("image_url");
     expect(createPayload).not.toHaveProperty("additional_image_urls");
@@ -97,6 +100,8 @@ describe("catálogo Meta del agente (031)", () => {
     expect(updatePayload).not.toHaveProperty("image_url");
     expect(updatePayload).not.toHaveProperty("additional_image_urls");
     expect(createPayload).not.toHaveProperty("catalog_id");
+    expect(catalogProductMutationSchema.safeParse({ ...parsed, inventory: "1.5" }).success).toBe(false);
+    expect(catalogProductGraphPayload({ ...parsed, inventory: "" }, "update")).not.toHaveProperty("quantity_to_sell_on_facebook");
   });
 
   it("prefiere la URL CDN más reciente de Meta para mostrar la imagen del producto", () => {
