@@ -7,6 +7,7 @@ import {
   MapPin,
   Paperclip,
   Send,
+  Sparkles,
   UserRound,
   X,
 } from "lucide-react";
@@ -43,6 +44,7 @@ export function Composer({
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<TemplateDto[]>([]);
   const [file, setFile] = useState<File | null>(null);
@@ -96,6 +98,35 @@ export function Composer({
     if (res.ok) return null;
     const data = (await res.json().catch(() => null)) as { message?: string } | null;
     return data?.message ?? `Error ${res.status}`;
+  }
+
+  async function suggestReply() {
+    if (suggesting || sending) return;
+    setSuggesting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/conversations/${conversation.id}/suggestion`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ draft: text }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        suggestion?: string;
+        error?: { message?: string };
+      } | null;
+      if (!res.ok || !data?.suggestion) {
+        setError(data?.error?.message ?? "No se pudo generar la sugerencia. Inténtalo de nuevo.");
+        return;
+      }
+      setText(data.suggestion);
+      setPanel(null);
+      taRef.current?.focus();
+      setTimeout(autogrow, 0);
+    } catch {
+      setError("No se pudo conectar con la IA. Inténtalo de nuevo.");
+    } finally {
+      setSuggesting(false);
+    }
   }
 
   async function submit() {
@@ -453,6 +484,18 @@ export function Composer({
             )}
           </div>
         )}
+        <button
+          onClick={() => void suggestReply()}
+          disabled={suggesting || sending}
+          aria-label="Sugerir respuesta con IA"
+          title={suggesting ? "Preparando sugerencia…" : "Sugerir respuesta con IA"}
+          className="shrink-0 rounded p-1.5 text-text-3 transition-colors hover:bg-secondary hover:text-brand disabled:opacity-40"
+        >
+          <Sparkles
+            className={cn("h-[18px] w-[18px]", suggesting && "animate-pulse text-brand")}
+            strokeWidth={1.7}
+          />
+        </button>
         <textarea
           ref={taRef}
           placeholder={file ? "Pie del adjunto (opcional)…" : "Escribe una respuesta…"}
