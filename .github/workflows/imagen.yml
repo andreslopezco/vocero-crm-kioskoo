@@ -2,8 +2,8 @@ name: Imagen
 
 # La imagen Docker de la instancia.
 #
-# - En cada PR y en cada push a main se CONSTRUYE sin publicar. Atrapa lo que
-#   `pnpm build` no ve: el Dockerfile, el entrypoint y la etapa runner.
+# - En cada PR se CONSTRUYE sin publicar. Atrapa lo que `pnpm build` no ve.
+# - En cada push a main se publica `:latest` y `:sha-<commit>` en GHCR.
 # - En cada push a staging se publica `:staging` y `:sha-<commit>` en GHCR,
 #   para consumir desde Dokploy sin construir la imagen en el servidor.
 # - Al crear un tag `vX.Y.Z` se PUBLICA en GitHub Container Registry:
@@ -28,7 +28,7 @@ concurrency:
 
 permissions:
   contents: read
-  # Solo se usa al publicar (tags o branch staging). En un PR desde un fork
+  # Solo se usa al publicar (main, staging o tags). En un PR desde un fork
   # GitHub lo baja a lectura por su cuenta.
   packages: write
 
@@ -42,7 +42,7 @@ jobs:
       - uses: docker/setup-buildx-action@v4
 
       - name: Entrar a GHCR (solo al publicar)
-        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/staging'
+        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/main'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -60,6 +60,7 @@ jobs:
             type=ref,event=branch
             type=ref,event=pr
             type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       # Solo amd64 por ahora: es lo que corren los VPS de la guía. arm64
       # (Oracle, Ampere) emulado con QEMU multiplica el tiempo del build; se
@@ -68,7 +69,7 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
-          push: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/staging' }}
+          push: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/main' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
