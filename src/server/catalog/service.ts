@@ -4,6 +4,7 @@ import { newId } from "@/lib/db/ids";
 import { graphRequest, MetaApiError } from "@/lib/meta/client";
 import { getCredentialsByOrg, markReconnectRequired } from "@/server/whatsapp/credentials";
 import { scoped } from "@/lib/db/tenant";
+import { LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE } from "@/server/dropi/product-mapping";
 
 const FRESH_MS = 10 * 60_000;
 const PAGE_SIZE = 100;
@@ -57,6 +58,7 @@ export class CatalogError extends Error {
 
 export type CatalogProductMutation = {
   retailerId: string;
+  dropiProductId?: string;
   name: string;
   description: string;
   availability: "in stock" | "out of stock" | "preorder";
@@ -171,21 +173,47 @@ export async function saveCatalogProduct(
   // antes de consultar a Meta nuevamente y publicar un snapshot posterior.
   const pending = inFlight.get(organizationId);
   if (pending) await pending.catch(() => undefined);
+  if (mode === "update") {
+    await storeLocalDropiProductId(organizationId, snapshot.catalogId, product.retailerId, product.dropiProductId ?? "");
+  }
   try {
-    await syncCatalog(organizationId, { force: true });
+    const refreshed = await syncCatalog(organizationId, { force: true });
+    if (mode === "create") {
+      const created = refreshed.products.find((item) => item.retailerId === product.retailerId);
+      if (!created || !(await storeLocalDropiProductId(organizationId, snapshot.catalogId, product.retailerId, product.dropiProductId ?? ""))) {
+        return { synced: false };
+      }
+    }
     return { synced: true };
   } catch {
-    // El cambio ya fue aceptado por Meta: no informamos un falso fallo que
-    // anime a duplicar la operación; la UI puede volver a sincronizar.
+    // El cambio ya fue aceptado por Meta; no informamos un falso fallo que
+    // anime a duplicar la operación. En edición, el mapeo local ya quedó guardado.
     return { synced: false };
   }
+}
+
+async function storeLocalDropiProductId(organizationId: string, catalogId: string, retailerId: string, dropiProductId: string): Promise<boolean> {
+  const db = getDb();
+  const where = scoped(
+    schema.metaCatalogProduct.organizationId,
+    organizationId,
+    eq(schema.metaCatalogProduct.catalogId, catalogId),
+    eq(schema.metaCatalogProduct.retailerId, retailerId)
+  );
+  const rows = await db.select({ attributes: schema.metaCatalogProduct.attributes }).from(schema.metaCatalogProduct).where(where).limit(1);
+  if (!rows[0]) return false;
+  const attributes = { ...(rows[0].attributes as Record<string, unknown>) };
+  if (dropiProductId) attributes[LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE] = dropiProductId;
+  else delete attributes[LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE];
+  await db.update(schema.metaCatalogProduct).set({ attributes, updatedAt: new Date() }).where(where);
+  return true;
 }
 
 function normalizeProduct(organizationId: string, catalogId: string, product: MetaProduct) {
   if (!product.retailer_id?.trim() || !product.name?.trim()) return null;
   const known = new Set([
     "id", "retailer_id", "name", "description", "availability", "price", "currency",
-    "brand", "image_url", "url",
+    "brand", "image_url", "url", LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE,
   ]);
   const attributes = Object.fromEntries(Object.entries(product).filter(([key]) => !known.has(key)));
   if (typeof product.id === "string") attributes.meta_product_id = product.id;
@@ -257,8 +285,21 @@ async function fetchSnapshot(organizationId: string): Promise<CatalogSnapshot> {
     const catalog = linkedCatalogs[0]!;
     const catalogId = catalog.id!;
     const products = await readAll<MetaProduct>(`${catalogId}/products`, credentials.token);
-    const rows = products.map((product) => normalizeProduct(organizationId, catalogId, product)).filter((row) => row !== null);
     const db = getDb();
+    const previousProducts = await db.select({ retailerId: schema.metaCatalogProduct.retailerId, attributes: schema.metaCatalogProduct.attributes })
+      .from(schema.metaCatalogProduct)
+      .where(scoped(schema.metaCatalogProduct.organizationId, organizationId));
+    const priorDropiIds = new Map(previousProducts.map((row) => [
+      row.retailerId,
+      (row.attributes as Record<string, unknown>)[LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE],
+    ]));
+    const rows = products.map((product) => normalizeProduct(organizationId, catalogId, product))
+      .filter((row) => row !== null)
+      .map((row) => {
+        const dropiProductId = priorDropiIds.get(row.retailerId);
+        if (typeof dropiProductId !== "string" || !/^\\d+$/.test(dropiProductId)) return row;
+        return { ...row, attributes: { ...row.attributes, [LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE]: dropiProductId } };
+      });
     await db.transaction(async (tx) => {
       const existing = await tx.select().from(schema.metaCatalog)
         .where(scoped(schema.metaCatalog.organizationId, organizationId)).limit(1);
