@@ -17,8 +17,7 @@ presenta al cliente como confirmada ni confirma disponibilidad.
 - Conector opcional `DROPI_ORDERS=on`, apagado por defecto, con credenciales
   OAuth cifradas por organización y adaptador MCP server-side. El Laboratorio
   no crea órdenes reales.
-- Dropi es la fuente de productos, IDs, variantes, precio disponible e
-  información de envío; el catálogo Meta no participa en la creación.
+- Dropi es la fuente de verdad para IDs, variantes, precios e información de envío. Cada producto del catálogo local puede vincularse manualmente con su ID numérico de Dropi; el vínculo se conserva en Vocero, nunca se envía a Meta, y solo se aceptan IDs vinculados.
 - El agente puede preparar la orden solo con los campos requeridos y validados
   por el servidor. `rate_type` y la política de precio se configuran en Ajustes;
   si falta la configuración o un dato, el agente pregunta y no crea.
@@ -46,7 +45,7 @@ presenta al cliente como confirmada ni confirma disponibilidad.
 - Ajustes permite conectar/desconectar la cuenta de Dropi y configurar tasa de
   recaudo y política de precio sin exponer tokens.
 - El prompt solo recibe productos/variantes validados del MCP, con stock y
-  precio disponibles; nunca inventa IDs, precio, stock o ciudad.
+  precio disponibles; nunca inventa IDs, precio, stock o ciudad. El servidor rechaza cualquier ID que no esté vinculado a un producto del catálogo local.
 - La intención de compra sin datos completos genera preguntas; no llama a
   `create_order`.
 - Una orden válida se crea máximo una vez, con datos del contacto y
