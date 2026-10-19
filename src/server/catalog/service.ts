@@ -10,7 +10,7 @@ const PAGE_SIZE = 100;
 const MAX_PAGES = 200;
 const PRODUCT_FIELDS = [
   "id", "retailer_id", "name", "description", "availability", "price", "currency",
-  "brand", "image_url", "url", "category", "condition",
+  "brand", "image_url", "image_cdn_urls", "additional_image_cdn_urls", "images", "url", "category", "condition",
   "manufacturer_part_number", "manufacturer_info", "gtin", "color", "material",
   "size", "pattern", "gender", "age_group", "product_type", "origin_country",
   "sale_price", "sale_price_start_date", "sale_price_end_date", "inventory",
@@ -64,7 +64,6 @@ export type CatalogProductMutation = {
   price: string;
   currency: string;
   brand: string;
-  imageUrls: string[];
   url: string;
   category: string;
   material: string;
@@ -88,8 +87,6 @@ export function catalogProductGraphPayload(product: CatalogProductMutation, mode
     price: priceInMinorUnits,
     currency: product.currency,
     brand: product.brand,
-    image_url: product.imageUrls[0],
-    additional_image_urls: product.imageUrls.slice(1),
     url: product.url,
     category: product.category,
     material: product.material,
@@ -108,7 +105,7 @@ export async function saveCatalogProduct(
   organizationId: string,
   product: CatalogProductMutation,
   mode: "create" | "update"
-): Promise<{ synced: boolean; imageSyncFailed?: boolean }> {
+): Promise<{ synced: boolean }> {
   const [credentials, snapshot] = await Promise.all([
     getCredentialsByOrg(organizationId),
     getCatalogSnapshot(organizationId),
@@ -171,16 +168,7 @@ export async function saveCatalogProduct(
   const pending = inFlight.get(organizationId);
   if (pending) await pending.catch(() => undefined);
   try {
-    const refreshed = await syncCatalog(organizationId);
-    if (mode === "update") {
-      const updated = refreshed.products.find((item) => item.retailerId === product.retailerId);
-      const attrs = updated?.attributes as Record<string, unknown> | undefined;
-      const actualImageUrls = [updated?.imageUrl, ...(Array.isArray(attrs?.additional_image_urls) ? attrs.additional_image_urls : [])]
-        .filter((url): url is string => typeof url === "string" && url.length > 0);
-      if (JSON.stringify(actualImageUrls) !== JSON.stringify(product.imageUrls)) {
-        return { synced: false, imageSyncFailed: true };
-      }
-    }
+    await syncCatalog(organizationId, { force: true });
     return { synced: true };
   } catch {
     // El cambio ya fue aceptado por Meta: no informamos un falso fallo que
@@ -205,10 +193,36 @@ function normalizeProduct(organizationId: string, catalogId: string, product: Me
     price: typeof product.price === "string" || typeof product.price === "number" ? String(product.price) : null,
     currency: typeof product.currency === "string" ? product.currency : null,
     brand: typeof product.brand === "string" ? product.brand : null,
-    imageUrl: typeof product.image_url === "string" ? product.image_url : null,
+    imageUrl: catalogProductImageUrl(product),
     url: typeof product.url === "string" ? product.url : null,
     attributes,
   };
+}
+
+function firstImageUrl(value: unknown): string | null {
+  if (typeof value === "string") return /^https:\/\//i.test(value) ? value : null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const url = firstImageUrl(item);
+      if (url) return url;
+    }
+    return null;
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of ["url", "uri", "src", "source"]) {
+      const url = firstImageUrl(record[key]);
+      if (url) return url;
+    }
+  }
+  return null;
+}
+
+/** La imagen mostrada debe ser la que Meta sirve desde su CDN, si está disponible. */
+export function catalogProductImageUrl(product: MetaProduct): string | null {
+  return firstImageUrl(product.image_cdn_urls)
+    ?? firstImageUrl(product.images)
+    ?? (typeof product.image_url === "string" ? product.image_url : null);
 }
 
 async function readAll<T>(path: string, token: string): Promise<T[]> {
@@ -277,11 +291,22 @@ export async function getCatalogSnapshot(organizationId: string): Promise<Catalo
   return { catalogId: catalog.catalogId, catalogName: catalog.catalogName, syncedAt: catalog.syncedAt, products };
 }
 
-export async function syncCatalog(organizationId: string): Promise<CatalogSnapshot> {
+export function syncCatalog(
+  organizationId: string,
+  options: { force?: boolean } = {}
+): Promise<CatalogSnapshot> {
   const current = inFlight.get(organizationId);
-  if (current) return current;
-  const pending = fetchSnapshot(organizationId).finally(() => inFlight.delete(organizationId));
+  if (current && !options.force) return current;
+  const pending = (async () => {
+    if (current) await current.catch(() => undefined);
+    return fetchSnapshot(organizationId);
+  })();
   inFlight.set(organizationId, pending);
+  void pending.then(() => {
+    if (inFlight.get(organizationId) === pending) inFlight.delete(organizationId);
+  }, () => {
+    if (inFlight.get(organizationId) === pending) inFlight.delete(organizationId);
+  });
   return pending;
 }
 

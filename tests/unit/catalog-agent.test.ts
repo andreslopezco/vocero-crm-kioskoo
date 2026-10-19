@@ -4,7 +4,7 @@ import { buildAgentSystemPrompt } from "@/server/ai/prompts";
 import { parseCatalogFlag } from "@/server/catalog/flag";
 import { catalogProductMutationSchema } from "@/server/catalog/input";
 import { CATALOG_IMAGE_MAX_BYTES, validateCatalogImage } from "@/server/catalog/images";
-import { catalogProductGraphPayload, resolveInStockProducts, type CatalogSnapshot } from "@/server/catalog/service";
+import { catalogProductGraphPayload, catalogProductImageUrl, resolveInStockProducts, type CatalogSnapshot } from "@/server/catalog/service";
 import { catalogContextForTurn, catalogProductsText } from "@/server/catalog/context";
 
 const product = {
@@ -49,7 +49,6 @@ describe("catálogo Meta del agente (031)", () => {
       price: "309900",
       currency: "cop",
       brand: "Keha",
-      imageUrls: ["https://cdn.example.com/olla.jpg", "https://cdn.example.com/olla-lateral.png"],
       url: "https://tienda.example.com/olla",
       category: "Hogar",
       material: "Acero inoxidable",
@@ -60,13 +59,12 @@ describe("catálogo Meta del agente (031)", () => {
     const parsed = catalogProductMutationSchema.safeParse(input);
     expect(parsed.success).toBe(true);
     if (parsed.success) expect(parsed.data.currency).toBe("COP");
-    expect(catalogProductMutationSchema.safeParse({ ...input, imageUrls: ["http://cdn.example.com/olla.jpg"] }).success).toBe(false);
-    expect(catalogProductMutationSchema.safeParse({ ...input, imageUrls: Array(11).fill("https://cdn.example.com/olla.jpg") }).success).toBe(false);
+    expect(catalogProductMutationSchema.safeParse({ ...input, imageUrls: ["https://cdn.example.com/olla.jpg"] }).data).not.toHaveProperty("imageUrls");
     expect(catalogProductMutationSchema.safeParse({ ...input, url: "https://user:password@tienda.example.com" }).success).toBe(false);
     expect(catalogProductMutationSchema.safeParse({ ...input, price: "0" }).success).toBe(false);
   });
 
-  it("mapea el precio a centavos para Meta y solo habilita upsert para una edición", () => {
+  it("mapea el precio a centavos y no incluye imágenes en las mutaciones", () => {
     const parsed = catalogProductMutationSchema.parse({
       retailerId: "SKU-OLLAS-01",
       name: "Set de ollas",
@@ -76,11 +74,6 @@ describe("catálogo Meta del agente (031)", () => {
       price: "309900",
       currency: "COP",
       brand: "Keha",
-      imageUrls: [
-        "https://cdn.example.com/olla.jpg",
-        "https://cdn.example.com/olla-lateral.jpg",
-        "https://cdn.example.com/olla-detalle.jpg",
-      ],
       url: "https://tienda.example.com/olla",
       category: "Hogar",
       material: "Acero inoxidable",
@@ -95,13 +88,24 @@ describe("catálogo Meta del agente (031)", () => {
       retailer_id: "SKU-OLLAS-01",
       price: 30990000,
       currency: "COP",
-      image_url: "https://cdn.example.com/olla.jpg",
-      additional_image_urls: ["https://cdn.example.com/olla-lateral.jpg", "https://cdn.example.com/olla-detalle.jpg"],
       material: "Acero inoxidable",
     });
+    expect(createPayload).not.toHaveProperty("image_url");
+    expect(createPayload).not.toHaveProperty("additional_image_urls");
     expect(catalogProductGraphPayload({ ...parsed, price: "309900.50" }, "create").price).toBe(30990050);
     expect(updatePayload).not.toHaveProperty("allow_upsert");
+    expect(updatePayload).not.toHaveProperty("image_url");
+    expect(updatePayload).not.toHaveProperty("additional_image_urls");
     expect(createPayload).not.toHaveProperty("catalog_id");
+  });
+
+  it("prefiere la URL CDN más reciente de Meta para mostrar la imagen del producto", () => {
+    expect(catalogProductImageUrl({
+      image_url: "https://source.example.com/old.jpg",
+      image_cdn_urls: [{ url: "https://cdn.example.com/current.jpg", width: "600" }],
+    })).toBe("https://cdn.example.com/current.jpg");
+    expect(catalogProductImageUrl({ image_url: "https://source.example.com/current.jpg" }))
+      .toBe("https://source.example.com/current.jpg");
   });
 
   it("valida tamaño, formato y dimensiones de las imágenes Meta", () => {

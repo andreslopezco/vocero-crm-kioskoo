@@ -26,7 +26,7 @@ export const GET = withAuth(async (session, req: Request) => {
 export const POST = withAuth(async (session) => {
   if (!catalogEnabled()) return catalogDisabledResponse();
   try {
-    const snapshot = await syncCatalog(session.organizationId);
+    const snapshot = await syncCatalog(session.organizationId, { force: true });
     return Response.json({
       catalog: {
         catalogId: snapshot.catalogId,
