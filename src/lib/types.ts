@@ -76,12 +76,26 @@ export type MessageMediaDto = {
   payload: unknown;
 };
 
+/** Pedido recibido desde el carrito del catálogo de WhatsApp. */
+export type WhatsappOrderDto = {
+  catalogId: string | null;
+  note: string | null;
+  items: {
+    retailerId: string;
+    productName: string | null;
+    quantity: string;
+    unitPrice: string | null;
+    currency: string | null;
+  }[];
+};
+
 export type MessageDto = {
   id: string;
   conversationId: string;
   direction: "in" | "out";
   type: string;
   text: string | null;
+  order?: WhatsappOrderDto | null;
   status: "pending" | "sent" | "delivered" | "read" | "failed";
   /** Motivo del fallo en lenguaje llano cuando status = "failed". */
   error: string | null;

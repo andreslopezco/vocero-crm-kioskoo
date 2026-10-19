@@ -1,0 +1,1 @@
+ALTER TABLE "message" ADD COLUMN "order_payload" jsonb;

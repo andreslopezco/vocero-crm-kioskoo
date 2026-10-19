@@ -11,6 +11,7 @@ import {
   Paperclip,
   Smartphone,
   Sparkles,
+  ShoppingBag,
   UserRound,
 } from "lucide-react";
 import type { MessageDto, MessageMediaDto } from "@/lib/types";
@@ -236,7 +237,35 @@ export function MessageThread({ messages }: { messages: MessageDto[] }) {
                   !grouped && (out ? "rounded-tr-[5px]" : "rounded-tl-[5px]")
                 )}
               >
-                {m.media ? (
+                {m.order ? (
+                  <span className="block min-w-56">
+                    <span className="mb-1.5 inline-flex items-center gap-1.5 font-medium">
+                      <ShoppingBag className="h-4 w-4 text-brand" strokeWidth={1.8} />
+                      Pedido del catálogo
+                    </span>
+                    <span className="flex flex-col gap-1.5">
+                      {m.order.items.map((item, itemIndex) => (
+                        <span key={`${item.retailerId}-${itemIndex}`} className="flex flex-col">
+                          <span className="font-medium break-words">
+                            {item.productName ?? `Producto ${item.retailerId}`}
+                          </span>
+                          <span className="text-[12px] text-text-3">
+                            SKU {item.retailerId} · {item.quantity} ud.
+                            {item.unitPrice !== null && ` · ${item.unitPrice}${item.currency ? ` ${item.currency}` : ""} c/u`}
+                          </span>
+                        </span>
+                      ))}
+                    </span>
+                    {m.order.note && (
+                      <span className="mt-1.5 block whitespace-pre-wrap break-words text-text-2">
+                        Nota: {m.order.note}
+                      </span>
+                    )}
+                    <span className="mt-1 block text-[11px] text-text-3">
+                      Solicitud pendiente de confirmación
+                    </span>
+                  </span>
+                ) : m.media ? (
                   <span className="block">
                     <MediaBlock media={m.media} />
                     {m.media.caption && (

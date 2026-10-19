@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { normalizeMx } from "@/lib/meta/client";
@@ -11,6 +11,9 @@ import type {
   WebhookMessage,
   WebhookValue,
 } from "@/server/inbox/webhook";
+import { webhookOrderSchema } from "@/server/inbox/webhook";
+import type { WhatsappOrderDto } from "@/lib/types";
+import { scoped } from "@/lib/db/tenant";
 import {
   getOrCreateContactByIdentity,
   resolveIdentity,
@@ -35,6 +38,7 @@ const SUPPORTED_TYPES = new Set([
   "sticker",
   "location",
   "contacts",
+  "order",
 ]);
 
 /** #78 — Respuestas de botón: entran como texto (ver `contenidoEntrante`). */
@@ -53,10 +57,12 @@ const BUTTON_REPLY_TYPES = new Set(["button", "interactive"]);
  * mensaje no tiene campo para metadatos y el rótulo es lo que el cliente vio y
  * eligió. Devuelve null si la respuesta no trae ni rótulo ni identificador
  * (payload roto): quien llama la descarta con aviso, nunca revienta el webhook.
+ * Los pedidos del carrito se validan y se normalizan a un resumen legible para
+ * el hilo y para el agente.
  */
 export function contenidoEntrante(
   msg: WebhookMessage
-): { type: string; text: string | null } | null {
+): { type: string; text: string | null; order?: WhatsappOrderDto } | null {
   if (msg.type === "button") {
     const rotulo = limpio(msg.button?.text) ?? limpio(msg.button?.payload);
     return rotulo ? { type: "text", text: rotulo } : null;
@@ -66,7 +72,74 @@ export function contenidoEntrante(
     const rotulo = limpio(reply?.title) ?? limpio(reply?.id);
     return rotulo ? { type: "text", text: rotulo } : null;
   }
+  if (msg.type === "order") {
+    const parsed = webhookOrderSchema.safeParse(msg.order);
+    if (!parsed.success) return null;
+    const order: WhatsappOrderDto = {
+      catalogId: parsed.data.catalog_id ?? null,
+      note: parsed.data.text?.trim() || null,
+      items: parsed.data.product_items.map((item) => ({
+        retailerId: item.product_retailer_id,
+        productName: null,
+        quantity: String(item.quantity),
+        unitPrice: item.item_price === undefined ? null : String(item.item_price),
+        currency: item.currency?.toUpperCase() ?? null,
+      })),
+    };
+    return { type: "order", text: resumenPedido(order), order };
+  }
   return { type: msg.type, text: msg.text?.body ?? null };
+}
+
+function resumenPedido(order: WhatsappOrderDto): string {
+  const lineas = order.items.map((item) => {
+    const nombre = item.productName ?? `Producto ${item.retailerId}`;
+    const precio = item.unitPrice
+      ? ` — ${item.unitPrice}${item.currency ? ` ${item.currency}` : ""} c/u`
+      : "";
+    return `- ${nombre} (SKU ${item.retailerId}) × ${item.quantity}${precio}`;
+  });
+  return [
+    "Pedido solicitado desde el catálogo de WhatsApp (pendiente de confirmación):",
+    ...lineas,
+    order.note ? `Mensaje del cliente: ${order.note}` : null,
+    "El evento no confirma que el pedido esté pagado.",
+  ].filter((linea): linea is string => Boolean(linea)).join("\n");
+}
+
+async function completarNombresPedido(
+  organizationId: string,
+  order: WhatsappOrderDto
+): Promise<WhatsappOrderDto> {
+  if (!order.catalogId || !order.items.length) return order;
+  try {
+    const db = getDb();
+    const retailerIds = [...new Set(order.items.map((item) => item.retailerId))];
+    const products = await db
+      .select({
+        retailerId: schema.metaCatalogProduct.retailerId,
+        name: schema.metaCatalogProduct.name,
+      })
+      .from(schema.metaCatalogProduct)
+      .where(scoped(
+        schema.metaCatalogProduct.organizationId,
+        organizationId,
+        eq(schema.metaCatalogProduct.catalogId, order.catalogId),
+        inArray(schema.metaCatalogProduct.retailerId, retailerIds)
+      ));
+    const names = new Map(products.map((product) => [product.retailerId, product.name]));
+    return {
+      ...order,
+      items: order.items.map((item) => ({
+        ...item,
+        productName: names.get(item.retailerId) ?? item.productName,
+      })),
+    };
+  } catch {
+    // Resolver los nombres es enriquecimiento opcional: el pedido debe entrar.
+    console.warn("[webhook] no se resolvieron los nombres del catálogo del pedido");
+    return order;
+  }
 }
 
 function limpio(valor: unknown): string | null {
@@ -282,7 +355,7 @@ export async function processMessagesValue(value: WebhookValue): Promise<void> {
     const contenido = contenidoEntrante(msg);
     if (!contenido) {
       console.warn(
-        `[webhook] respuesta de botón ${msg.id} (${msg.type}) sin rótulo ni identificador: descartada`
+        `[webhook] mensaje entrante de tipo ${msg.type} con estructura inválida: descartado`
       );
       continue;
     }
@@ -295,12 +368,16 @@ export async function processMessagesValue(value: WebhookValue): Promise<void> {
       );
       continue;
     }
+    const order = contenido.order
+      ? await completarNombresPedido(organizationId, contenido.order)
+      : null;
     await ingestInboundMessage({
       organizationId,
       identity: resolved,
       waMessageId: msg.id,
       type: contenido.type,
-      text: contenido.text,
+      text: order ? resumenPedido(order) : contenido.text,
+      order,
       timestamp: msg.timestamp,
       media: mediaInputFrom(msg),
       // 018: normalizado aquí, en el adaptador del canal; la ingesta no sabe
@@ -435,6 +512,7 @@ export async function ingestInboundMessage(input: {
   waMessageId: string;
   type: string;
   text: string | null;
+  order?: WhatsappOrderDto | null;
   timestamp: string;
   media?: MediaInput | null;
   /** 014: hilo en la plataforma de origen (Zernio); null en WhatsApp. */
@@ -492,6 +570,7 @@ export async function ingestInboundMessage(input: {
       direction: "in",
       type: input.type,
       text: input.text,
+      order: input.order ?? null,
       status: "delivered",
       waTimestamp,
     })
@@ -547,6 +626,7 @@ export function serializeMessage(
     direction: m.direction,
     type: m.type,
     text: m.text,
+    order: m.order ?? null,
     status: m.status,
     /** Motivo del fallo, ya traducido a algo accionable (`describeSendError`). */
     error: m.error,

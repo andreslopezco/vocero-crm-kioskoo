@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { z } from "zod";
 
 /**
  * Autenticación en dos capas del webhook (contrato webhook.md / DV-VC-02).
@@ -77,6 +78,26 @@ export type WebhookReferral = {
   ctwa_clid?: string;
 };
 
+/** Estructura de pedido del carrito enviada por la Cloud API. */
+export const webhookOrderSchema = z.object({
+  catalog_id: z.string().min(1).optional(),
+  text: z.string().optional(),
+  product_items: z.array(z.object({
+    product_retailer_id: z.string().min(1),
+    quantity: z.union([
+      z.string().regex(/^[1-9]\d*$/),
+      z.number().int().positive().finite(),
+    ]),
+    item_price: z.union([
+      z.string().regex(/^(?:0|[1-9]\d*)(?:\.\d+)?$/),
+      z.number().nonnegative().finite(),
+    ]).optional(),
+    currency: z.string().min(1).optional(),
+  }).passthrough()).min(1).max(100),
+}).passthrough();
+
+export type WebhookOrder = z.infer<typeof webhookOrderSchema>;
+
 /**
  * #78 — Respuesta a un botón de respuesta rápida de una PLANTILLA
  * (`type: "button"`): `text` es el rótulo que vio el cliente y `payload` el
@@ -120,6 +141,8 @@ export type WebhookMessage = {
   button?: WebhookButtonReply;
   /** #78: respuesta a un botón o a una lista de un mensaje interactivo. */
   interactive?: WebhookInteractiveReply;
+  /** Pedido enviado desde el carrito nativo del catálogo. */
+  order?: unknown;
   /** El mensaje al que responde (botones, citas): `id` es su wa_message_id. */
   context?: { from?: string; id?: string };
   /** 016: origen del anuncio, cuando la conversación nació de uno. */
