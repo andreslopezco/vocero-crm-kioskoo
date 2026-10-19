@@ -1,6 +1,7 @@
 import {
   CalendarDays,
   ChartColumn,
+  PackageSearch,
   FlaskConical,
   Inbox,
   Kanban,
@@ -49,10 +50,13 @@ export const SETTINGS_ITEM: NavItem = {
  */
 export function appNavGroups({
   agenda = false,
+  catalogo = false,
   role,
 }: {
   /** 015 — "Citas" solo existe si esta instancia encendió la agenda. */
   agenda?: boolean;
+  /** 031 — El catálogo consultable solo existe cuando el módulo está activo. */
+  catalogo?: boolean;
   /** #86 — La guía de inicio solo para quien puede configurar. */
   role?: string | null;
 }): NavGroup[] {
@@ -74,6 +78,7 @@ export function appNavGroups({
     { href: "/agent", label: "Agente", icon: Sparkles },
     { href: "/lab", label: "Laboratorio", icon: FlaskConical }
   );
+  if (catalogo) agente.push({ href: "/catalog", label: "Catálogo", icon: PackageSearch });
 
   return [
     { title: "Trabajo", items: trabajo },

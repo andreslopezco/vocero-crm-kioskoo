@@ -526,6 +526,56 @@ export const metaCredentials = pgTable(
   ]
 );
 
+/** 031 — Catálogo vinculado a la WABA y snapshot reemplazable de productos. */
+export const metaCatalog = pgTable(
+  "meta_catalog",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    catalogId: text("catalog_id").notNull(),
+    catalogName: text("catalog_name"),
+    syncedAt: timestamp("synced_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("meta_catalog_org_uq").on(t.organizationId),
+  ]
+);
+
+export const metaCatalogProduct = pgTable(
+  "meta_catalog_product",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    catalogId: text("catalog_id").notNull(),
+    retailerId: text("retailer_id").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    availability: text("availability"),
+    price: text("price"),
+    currency: text("currency"),
+    brand: text("brand"),
+    imageUrl: text("image_url"),
+    url: text("url"),
+    /** Atributos Meta adicionales sin pérdida; nunca se interpretan como órdenes. */
+    attributes: jsonb("attributes").notNull().default({}),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("meta_catalog_product_org_retailer_uq").on(
+      t.organizationId,
+      t.retailerId
+    ),
+    index("meta_catalog_product_org_idx").on(t.organizationId),
+  ]
+);
+
 /**
  * 014 - Credenciales del canal de Instagram. Tabla explicita (no un jsonb
  * generico) porque unas credenciales tienen forma fija y conocida: asi

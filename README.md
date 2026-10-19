@@ -262,6 +262,14 @@ la imagen es el camino recomendado: tu servidor la descarga en vez de
 construirla. Construir desde el código sigue funcionando, y es lo que
 necesitas en un VPS ARM o si tu fork cambia el código.
 
+En este fork, cada push a `staging` también publica
+`ghcr.io/andreslopezco/vocero-crm-kioskoo:staging` (y una etiqueta
+`sha-<commit>` inmutable) para despliegues de prueba en Dokploy. Configura la
+aplicación de Dokploy como **Docker Image** con la etiqueta `staging`; si el
+paquete de GHCR es privado, agrega en Dokploy un registry con un token que
+tenga permiso de lectura de paquetes. La imagen de staging se construye para
+`linux/amd64` y lleva el SHA de Git en `SOURCE_COMMIT`.
+
 ### 0. Apunta tu dominio
 
 Crea un registro **A** de `crm.tudominio.com` hacia la IP del VPS y espera a

@@ -27,7 +27,7 @@ de skills, scripts ni plugins de ningún asistente.
 | Tiempo real | SSE en `GET /api/events` sobre un bus in-process (`src/server/events/bus.ts`); sin WebSockets ni colas: el trabajo en segundo plano corre dentro del proceso |
 | UI | Tailwind CSS con tokens en `src/app/globals.css`, tema claro/oscuro, white-label por organización |
 | Pruebas | Vitest (`tests/unit/`) + guiones E2E (`tests/e2e/*.md`) conducidos por `scripts/e2e-*.mjs` (fetch y, algunos, Playwright) contra la app con mocks |
-| Imagen | Docker multi-stage standalone, healthcheck `/api/health`, publicada en `ghcr.io/kevinrivm/vocero-crm:X.Y.Z` por `.github/workflows/imagen.yml` |
+| Imagen | Docker multi-stage standalone, healthcheck `/api/health`; `.github/workflows/imagen.yml` publica releases en `ghcr.io/kevinrivm/vocero-crm:X.Y.Z` y cada push a `staging` en `ghcr.io/<owner>/<repo>:staging` más una etiqueta por commit |
 
 ## Cómo correrlo
 
@@ -179,7 +179,7 @@ Documentación: README («Trae tu propio agente»), guion `tests/e2e/us-bot-api.
 2. Antes de abrir el PR: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`. El CI (`.github/workflows/ci.yml`) corre esos cuatro gates en dos configuraciones, banderas apagadas y `CHANNELS` + `AGENDA` encendidas; `imagen.yml` construye la imagen Docker en cada PR.
 3. Comportamiento observable nuevo: amplía o escribe su guion en `tests/e2e/` y, si se puede, su arnés en `scripts/e2e-*.mjs`; córrelo contra la app con mocks (`WA_MOCK_ENABLED=true`, `META_GRAPH_BASE_URL` → `/api/dev/wa-mock/graph`, `OPENROUTER_BASE_URL` → `/api/dev/ai-mock`, `BOT_API_KEY`; receta en `specs/001-vocero-core/quickstart.md`). Prueba también el camino infeliz.
 4. Specs (`specs/`): si tocas el modelo de datos o un contrato publicado, ciclo completo en `specs/NNN-nombre/`; comportamiento nuevo sin eso, un `spec.md` ligero; arreglos, refactors y dependencias quedan exentos (Principio VI de la constitución).
-5. Versión y release: sube `version` en `package.json`, el default de `VOCERO_CRM_VERSION` en `docker-compose.yml` (`tests/unit/version.test.ts` exige que coincidan) y la etiqueta de la imagen en `render.yaml`, `fly.toml` y `railway.toml` (`tests/unit/manifests-plataformas.test.ts`), añade la entrada en `CHANGELOG.md` con su «Actualizar desde…» y actualiza la etiqueta de la imagen en `INSTALL-IA.md`. El tag `vX.Y.Z` publica la imagen.
+5. Versión y release: sube `version` en `package.json`, el default de `VOCERO_CRM_VERSION` en `docker-compose.yml` (`tests/unit/version.test.ts` exige que coincidan) y la etiqueta de la imagen en `render.yaml`, `fly.toml` y `railway.toml` (`tests/unit/manifests-plataformas.test.ts`), añade la entrada en `CHANGELOG.md` con su «Actualizar desde…» y actualiza la etiqueta de la imagen en `INSTALL-IA.md`. El tag `vX.Y.Z` publica la imagen de versión; cada push a `staging` también publica la imagen mutable para ese entorno.
 6. Dependencias: `pnpm install --frozen-lockfile` debe pasar; un tercero nuevo en el núcleo necesita justificación constitucional (Principio II).
 
 Las instrucciones específicas de Claude Code están en `CLAUDE.md`.

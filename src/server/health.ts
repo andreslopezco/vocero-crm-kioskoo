@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { APP_VERSION, resolveCommit } from "@/lib/version";
 import { parseAgendaFlag } from "@/server/agenda/flag";
 import { parseAtribucionFlag } from "@/server/attribution/flag";
+import { parseCatalogFlag } from "@/server/catalog/flag";
 import { parseChannels } from "@/server/channels/enabled";
 import { mediaDirStatus } from "@/server/media-dir";
 
@@ -43,6 +44,8 @@ export type HealthFeatures = {
   channels: Channel[];
   /** Atribución de anuncios y CAPI (016): bandera `ATRIBUCION`. */
   atribucion: boolean;
+  /** Catálogo Meta para el agente (031): bandera `KIOSKOO_CATALOGO`. */
+  catalogo: boolean;
 };
 
 export type HealthOk = {
@@ -64,13 +67,14 @@ export type HealthResult =
   | { status: 503; body: HealthDown };
 
 /**
- * Las tres variables de despliegue que deciden qué existe en la instancia.
+ * Las variables de despliegue que deciden qué existe en la instancia.
  * El índice es para que `process.env` encaje sin cast (y el resto se ignora).
  */
 export type FlagEnv = {
   AGENDA?: string;
   CHANNELS?: string;
   ATRIBUCION?: string;
+  KIOSKOO_CATALOGO?: string;
   [otra: string]: string | undefined;
 };
 
@@ -86,6 +90,7 @@ export function healthFeatures(env: FlagEnv = process.env): HealthFeatures {
     agenda: parseAgendaFlag(env.AGENDA),
     channels: CHANNEL_ORDER.filter((c) => channels.has(c)),
     atribucion: parseAtribucionFlag(env.ATRIBUCION),
+    catalogo: parseCatalogFlag(env.KIOSKOO_CATALOGO),
   };
 }
 

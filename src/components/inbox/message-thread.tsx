@@ -43,7 +43,9 @@ type ContactPayload = {
 
 /** 008 — Previsualización del adjunto de un mensaje, por tipo. */
 function MediaBlock({ media }: { media: MessageMediaDto }) {
-  const src = `/api/media/${media.assetId}`;
+  const src = media.kind === "image" && media.externalUrl
+    ? media.externalUrl
+    : `/api/media/${media.assetId}`;
 
   if (media.kind === "location") {
     const loc = (media.payload ?? {}) as LocationPayload;

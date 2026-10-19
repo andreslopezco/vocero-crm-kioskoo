@@ -9,12 +9,12 @@ import { isAiConfiguredFor } from "@/lib/ai/provider";
 import { publish } from "@/server/events/bus";
 import { isWindowOpen } from "@/server/inbox/window";
 import { windowMsFor } from "@/server/channels/capabilities";
-import { SendError, sendText } from "@/server/inbox/send";
+import { SendError, sendCatalogImage, sendCatalogProducts, sendText } from "@/server/inbox/send";
 import {
-  agentActionSchema,
   degradeAction,
   resolveStage,
   type AgentActionType,
+  agentActionSchemaFor,
 } from "@/server/ai/actions";
 import { HANDOFF_BACKUP_ACK, matchesHandoffIntent } from "@/server/ai/handoff";
 import {
@@ -30,6 +30,9 @@ import {
 import { agendaEnabled } from "@/server/agenda/flag";
 import { bookSlot, offerSlots } from "@/server/agenda/agent";
 import { getOffers, mapaDeHuecosParaModelo } from "@/server/agenda/offers";
+import { catalogEnabled } from "@/server/catalog/flag";
+import { getCatalogSnapshot, getFreshCatalog, isCatalogFresh, resolveInStockProducts } from "@/server/catalog/service";
+import { catalogContextForTurn, catalogProductsText, stripCatalogLinks } from "@/server/catalog/context";
 
 /**
  * Turno del agente (FR-021..FR-025).
@@ -248,6 +251,13 @@ export async function runAgentTurn(
     .orderBy(asc(schema.pipelineStage.position));
 
   const agenda = agendaEnabled();
+  const catalogIsEnabled = catalogEnabled();
+  const catalog = catalogIsEnabled
+    ? conversation.isTest
+      ? await getCatalogSnapshot(organizationId).then((snapshot) => isCatalogFresh(snapshot) ? snapshot : null)
+      : await getFreshCatalog(organizationId)
+    : null;
+  const catalogContext = catalog ? catalogContextForTurn(catalog, lastInbound.text ?? "") : null;
 
   /**
    * 015 — Los huecos vigentes, con su instante exacto.
@@ -275,7 +285,7 @@ export async function runAgentTurn(
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: buildAgentSystemPrompt({ profile, kb, stages, agenda }),
+      content: buildAgentSystemPrompt({ profile, kb, stages, agenda, catalogEnabled: catalogIsEnabled, channel: conversation.channel, catalog: catalogContext }),
     },
     ...history
       .filter((m) => m.text)
@@ -294,7 +304,7 @@ export async function runAgentTurn(
     { role: "system", content: TURN_FORMAT_REMINDER },
   ];
 
-  const result = await chatJson(agentActionSchema(agenda), messages, {
+  const result = await chatJson(agentActionSchemaFor(agenda, Boolean(catalog)), messages, {
     organizationId,
   });
   if (!result.ok) {
@@ -306,6 +316,65 @@ export async function runAgentTurn(
   }
 
   let action: AgentActionType = result.data;
+
+  if (action.action === "send_products") {
+    if (!catalog) {
+      action = degradeAction(action);
+    } else {
+      const selected = resolveInStockProducts(catalog, action.retailerIds);
+      if (!selected) {
+        action = degradeAction(action);
+      } else if (conversation.isTest) {
+        await persistTestOutbound(conversation, catalogProductsText(selected, conversation.channel, action.reply));
+        return leido;
+      } else {
+        if (conversation.channel === "whatsapp") {
+          let nativeSent = false;
+          try {
+            await sendCatalogProducts({
+              conversationId,
+              organizationId,
+              retailerIds: action.retailerIds,
+              aiGenerated: true,
+            });
+            nativeSent = true;
+          } catch (err) {
+            console.warn(`[agente] tarjeta nativa no disponible; se usará texto: ${err instanceof Error ? err.message : "error"}`);
+          }
+          if (nativeSent) {
+            const reply = action.reply ? stripCatalogLinks(action.reply) : "";
+            if (reply) await deliverReply(conversation, reply);
+            return leido;
+          }
+        }
+
+        const productText = catalogProductsText(selected, conversation.channel, action.reply);
+        try {
+          await deliverReply(conversation, productText);
+        } catch (err) {
+          console.error(`[agente] no se pudo enviar la ficha de productos: ${err instanceof Error ? err.message : "error"}`);
+          return leido;
+        }
+        if (conversation.channel === "whatsapp") {
+          for (const product of selected) {
+            if (!product.imageUrl) continue;
+            try {
+              await sendCatalogImage({
+                conversationId,
+                organizationId,
+                imageUrl: product.imageUrl,
+                caption: product.name,
+                aiGenerated: true,
+              });
+            } catch (err) {
+              console.warn(`[agente] no se pudo adjuntar imagen del producto ${product.retailerId}: ${err instanceof Error ? err.message : "error"}`);
+            }
+          }
+        }
+        return leido;
+      }
+    }
+  }
 
   // 015 — Agenda. Un fallo del motor degrada el turno (el agente responde sin
   // agendar), nunca lo tumba: quedarse callado es peor que no agendar.

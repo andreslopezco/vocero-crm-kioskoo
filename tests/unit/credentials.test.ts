@@ -6,22 +6,42 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
  */
 
 const insertedRows: Record<string, unknown>[] = [];
+type CredentialMockDb = {
+  transaction: (run: (tx: CredentialMockDb) => Promise<void>) => Promise<void>;
+  select: () => { from: () => { where: () => { limit: () => Promise<never[]> } } };
+  insert: () => {
+    values: (value: Record<string, unknown>) => {
+      onConflictDoUpdate: () => Promise<void>;
+    };
+  };
+};
 
 vi.mock("@/lib/db", () => ({
-  getDb: () => ({
-    insert: () => ({
-      values: (v: Record<string, unknown>) => {
-        insertedRows.push(v);
-        return {
-          onConflictDoUpdate: () => Promise.resolve(),
-        };
-      },
-    }),
-  }),
+  getDb: () => {
+    const db: CredentialMockDb = {
+      transaction: (run: (tx: CredentialMockDb) => Promise<void>) => run(db),
+      select: () => ({
+        from: () => ({
+          where: () => ({ limit: async () => [] }),
+        }),
+      }),
+      insert: () => ({
+        values: (v: Record<string, unknown>) => {
+          insertedRows.push(v);
+          return {
+            onConflictDoUpdate: () => Promise.resolve(),
+          };
+        },
+      }),
+    };
+    return db;
+  },
   schema: {
     metaCredentials: { organizationId: "organization_id" },
   },
 }));
+
+vi.mock("@/lib/db/tenant", () => ({ scoped: () => ({}) }));
 
 beforeAll(() => {
   process.env.APP_BASE_URL = "http://localhost:3000";

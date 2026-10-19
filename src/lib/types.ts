@@ -70,6 +70,8 @@ export type MessageMediaDto = {
   fileSize: number | null;
   caption: string | null;
   fetchStatus: "available" | "pending" | "failed";
+  /** Imágenes públicas provenientes del catálogo, no almacenadas en el CRM. */
+  externalUrl?: string;
   /** location {latitude, longitude, name?, address?} / contacts (subset). */
   payload: unknown;
 };
