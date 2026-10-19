@@ -14,6 +14,11 @@ const baseActions = [
     reply: z.string().optional(),
   }),
   z.object({
+    action: z.literal("update_ficha"),
+    ficha: z.record(z.union([z.string(), z.number(), z.boolean()])),
+    reply: z.string().optional(),
+  }),
+  z.object({
     action: z.literal("move_stage"),
     stage: z.string().min(1),
     reply: z.string().optional(),

@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
+import { upsertFicha, type FichaInput } from "@/server/bot/ficha";
 import { moveLeadToStage as moveLeadThroughHistory } from "@/server/leads/stage-history";
 import { getEnv } from "@/lib/env";
 import { chatJson, type ChatMessage } from "@/lib/ai";
@@ -255,6 +256,21 @@ export async function runAgentTurn(
     .from(schema.pipelineStage)
     .where(eq(schema.pipelineStage.organizationId, organizationId))
     .orderBy(asc(schema.pipelineStage.position));
+  const contactRows = await db
+    .select({ ficha: schema.contact.ficha })
+    .from(schema.contact)
+    .where(
+      scoped(
+        schema.contact.organizationId,
+        organizationId,
+        eq(schema.contact.id, conversation.contactId)
+      )
+    )
+    .limit(1);
+  const contactFicha = (contactRows[0]?.ficha ?? {}) as Record<
+    string,
+    string | number | boolean | null
+  >;
 
   const agenda = agendaEnabled();
   const catalogIsEnabled = catalogEnabled();
@@ -300,7 +316,7 @@ export async function runAgentTurn(
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: buildAgentSystemPrompt({ profile, kb, stages, agenda, catalogEnabled: catalogIsEnabled, channel: conversation.channel, catalog: catalogContext, catalogCategories }),
+      content: buildAgentSystemPrompt({ profile, kb, stages, agenda, catalogEnabled: catalogIsEnabled, channel: conversation.channel, catalog: catalogContext, catalogCategories, contactFicha }),
     },
     ...history
       .filter((m) => m.text)
@@ -452,6 +468,19 @@ export async function runAgentTurn(
       return leido;
     case "update_lead": {
       await appendLeadNote(organizationId, conversation.contactId, action.note);
+      if (action.reply) await deliverReply(conversation, action.reply);
+      return leido;
+    }
+    case "update_ficha": {
+      await upsertFicha({
+        organizationId,
+        contactId: conversation.contactId,
+        ficha: action.ficha as FichaInput,
+      });
+      publish(organizationId, {
+        type: "conversation.updated",
+        data: { conversation: { id: conversationId } },
+      });
       if (action.reply) await deliverReply(conversation, action.reply);
       return leido;
     }
