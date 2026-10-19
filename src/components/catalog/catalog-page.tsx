@@ -27,8 +27,8 @@ type ProductForm = {
   retailerId: string;
   name: string;
   description: string;
-  availability: "in stock" | "out of stock" | "preorder";
-  condition: "new" | "refurbished" | "used";
+  availability: "" | "in stock" | "out of stock" | "preorder";
+  condition: "" | "new" | "refurbished" | "used";
   price: string;
   currency: string;
   brand: string;
@@ -42,13 +42,13 @@ type ProductForm = {
 type ProductEditor = { mode: "create" | "edit"; product?: Product };
 
 const EMPTY_FORM: ProductForm = {
-  retailerId: "", name: "", description: "", availability: "in stock", condition: "new",
-  price: "", currency: "COP", brand: "", url: "", category: "",
+  retailerId: "", name: "", description: "", availability: "", condition: "",
+  price: "", currency: "", brand: "", url: "", category: "",
   material: "", color: "", size: "", pattern: "",
 };
 
 function formFromProduct(product: Product): ProductForm {
-  const currency = product.currency ?? product.price?.match(/[A-Z]{3}$/)?.[0] ?? "COP";
+  const currency = product.currency ?? product.price?.match(/[A-Z]{3}$/)?.[0] ?? "";
   let price = (product.price ?? "").replace(currency, "").replace(/[^\d.,]/g, "").trim();
   if (price.includes(",") && price.includes(".")) {
     price = price.lastIndexOf(",") > price.lastIndexOf(".")
@@ -67,8 +67,8 @@ function formFromProduct(product: Product): ProductForm {
     retailerId: product.retailerId,
     name: product.name,
     description: product.description ?? "",
-    availability: product.availability === "out of stock" || product.availability === "preorder" ? product.availability : "in stock",
-    condition: product.attributes.condition === "used" || product.attributes.condition === "refurbished" ? product.attributes.condition : "new",
+    availability: product.availability === "in stock" || product.availability === "out of stock" || product.availability === "preorder" ? product.availability : "",
+    condition: product.attributes.condition === "new" || product.attributes.condition === "used" || product.attributes.condition === "refurbished" ? product.attributes.condition : "",
     price,
     currency,
     brand: product.brand ?? "",
@@ -79,6 +79,10 @@ function formFromProduct(product: Product): ProductForm {
     size: value("size"),
     pattern: value("pattern"),
   };
+}
+
+function FieldLabel({ children, required = false }: { children: React.ReactNode; required?: boolean }) {
+  return <span>{children}{required && <span aria-hidden="true" className="ml-1 text-danger-text">*</span>}</span>;
 }
 
 function showValue(value: unknown): string {
@@ -362,73 +366,75 @@ export function CatalogPage() {
             {formError && <div role="alert" className="flex items-start gap-2 rounded-lg border border-danger-soft bg-danger-tint p-3 text-sm text-danger-text"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{formError}</div>}
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="space-y-1.5 text-sm font-medium">
-                <span>Identificador / SKU</span>
-                <Input required maxLength={100} value={form.retailerId} disabled={editor.mode === "edit" || saving} onChange={(event) => setForm({ ...form, retailerId: event.target.value })} placeholder="SKU-001" />
+                <FieldLabel required>Identificador / SKU</FieldLabel>
+                <Input required maxLength={100} value={form.retailerId} disabled={editor.mode === "edit" || saving} onChange={(event) => setForm({ ...form, retailerId: event.target.value })} placeholder="Identificador / SKU" />
                 <span className="block text-xs font-normal text-text-3">No se puede cambiar después de crear el producto.</span>
               </label>
               <label className="space-y-1.5 text-sm font-medium">
-                <span>Nombre</span>
-                <Input required maxLength={200} value={form.name} disabled={saving} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Nombre del producto" />
+                <FieldLabel required>Nombre</FieldLabel>
+                <Input required maxLength={200} value={form.name} disabled={saving} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Nombre" />
               </label>
             </div>
             <label className="block space-y-1.5 text-sm font-medium">
-              <span>Descripción</span>
-              <Textarea required maxLength={5000} rows={3} value={form.description} disabled={saving} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Describe el producto para tus clientes" />
+              <FieldLabel required>Descripción</FieldLabel>
+              <Textarea required maxLength={5000} rows={3} value={form.description} disabled={saving} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Descripción" />
             </label>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="space-y-1.5 text-sm font-medium">
-                <span>Precio</span>
-                <Input required inputMode="decimal" value={form.price} disabled={saving} onChange={(event) => setForm({ ...form, price: event.target.value })} placeholder="309900" />
+                <FieldLabel required>Precio</FieldLabel>
+                <Input required inputMode="decimal" value={form.price} disabled={saving} onChange={(event) => setForm({ ...form, price: event.target.value })} placeholder="Precio" />
                 <span className="block text-xs font-normal text-text-3">Solo números, sin separadores de miles.</span>
               </label>
               <label className="space-y-1.5 text-sm font-medium">
-                <span>Moneda (ISO 4217)</span>
-                <Input required minLength={3} maxLength={3} value={form.currency} disabled={saving} onChange={(event) => setForm({ ...form, currency: event.target.value.toUpperCase() })} placeholder="COP" />
+                <FieldLabel required>Moneda (ISO 4217)</FieldLabel>
+                <Input required minLength={3} maxLength={3} value={form.currency} disabled={saving} onChange={(event) => setForm({ ...form, currency: event.target.value.toUpperCase() })} placeholder="Moneda (ISO 4217)" />
               </label>
               <label className="space-y-1.5 text-sm font-medium">
-                <span>Disponibilidad</span>
-                <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand-soft" value={form.availability} disabled={saving} onChange={(event) => setForm({ ...form, availability: event.target.value as ProductForm["availability"] })}>
+                <FieldLabel required>Disponibilidad</FieldLabel>
+                <select required className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand-soft" value={form.availability} disabled={saving} onChange={(event) => setForm({ ...form, availability: event.target.value as ProductForm["availability"] })}>
+                  <option value="" disabled>Disponibilidad</option>
                   <option value="in stock">Disponible</option>
                   <option value="out of stock">Agotado</option>
                   <option value="preorder">En preventa</option>
                 </select>
               </label>
               <label className="space-y-1.5 text-sm font-medium">
-                <span>Condición</span>
-                <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand-soft" value={form.condition} disabled={saving} onChange={(event) => setForm({ ...form, condition: event.target.value as ProductForm["condition"] })}>
+                <FieldLabel required>Condición</FieldLabel>
+                <select required className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand-soft" value={form.condition} disabled={saving} onChange={(event) => setForm({ ...form, condition: event.target.value as ProductForm["condition"] })}>
+                  <option value="" disabled>Condición</option>
                   <option value="new">Nuevo</option>
                   <option value="refurbished">Reacondicionado</option>
                   <option value="used">Usado</option>
                 </select>
               </label>
               <label className="space-y-1.5 text-sm font-medium">
-                <span>Marca</span>
+                <FieldLabel>Marca</FieldLabel>
                 <Input maxLength={100} value={form.brand} disabled={saving} onChange={(event) => setForm({ ...form, brand: event.target.value })} placeholder="Marca" />
               </label>
               <label className="space-y-1.5 text-sm font-medium">
-                <span>Categoría</span>
-                <Input maxLength={200} value={form.category} disabled={saving} onChange={(event) => setForm({ ...form, category: event.target.value })} placeholder="Hogar y cocina" />
+                <FieldLabel>Categoría</FieldLabel>
+                <Input maxLength={200} value={form.category} disabled={saving} onChange={(event) => setForm({ ...form, category: event.target.value })} placeholder="Categoría" />
               </label>
               <label className="space-y-1.5 text-sm font-medium">
-                <span>Material</span>
-                <Input maxLength={200} value={form.material} disabled={saving} onChange={(event) => setForm({ ...form, material: event.target.value })} placeholder="Acero inoxidable" />
+                <FieldLabel>Material</FieldLabel>
+                <Input maxLength={200} value={form.material} disabled={saving} onChange={(event) => setForm({ ...form, material: event.target.value })} placeholder="Material" />
               </label>
               <label className="space-y-1.5 text-sm font-medium">
-                <span>Color</span>
+                <FieldLabel>Color</FieldLabel>
                 <Input maxLength={100} value={form.color} disabled={saving} onChange={(event) => setForm({ ...form, color: event.target.value })} placeholder="Color" />
               </label>
               <label className="space-y-1.5 text-sm font-medium">
-                <span>Tamaño</span>
-                <Input maxLength={100} value={form.size} disabled={saving} onChange={(event) => setForm({ ...form, size: event.target.value })} placeholder="5 y 7 litros" />
+                <FieldLabel>Tamaño</FieldLabel>
+                <Input maxLength={100} value={form.size} disabled={saving} onChange={(event) => setForm({ ...form, size: event.target.value })} placeholder="Tamaño" />
               </label>
               <label className="space-y-1.5 text-sm font-medium">
-                <span>Diseño / patrón</span>
-                <Input maxLength={100} value={form.pattern} disabled={saving} onChange={(event) => setForm({ ...form, pattern: event.target.value })} placeholder="Opcional" />
+                <FieldLabel>Diseño / patrón</FieldLabel>
+                <Input maxLength={100} value={form.pattern} disabled={saving} onChange={(event) => setForm({ ...form, pattern: event.target.value })} placeholder="Diseño / patrón" />
               </label>
             </div>
             <label className="block space-y-1.5 text-sm font-medium">
-              <span>URL HTTPS del producto</span>
-              <Input required type="url" value={form.url} disabled={saving} onChange={(event) => setForm({ ...form, url: event.target.value })} placeholder="https://…" />
+              <FieldLabel required>URL HTTPS del producto</FieldLabel>
+              <Input required type="url" value={form.url} disabled={saving} onChange={(event) => setForm({ ...form, url: event.target.value })} placeholder="URL HTTPS del producto" />
             </label>
             <div className="flex justify-end gap-2 border-t pt-4">
               <Button type="button" variant="secondary" disabled={saving} onClick={() => setEditor(null)}>Cancelar</Button>
