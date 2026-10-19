@@ -247,7 +247,7 @@ export function CatalogPage() {
       setEditor(null);
       await load();
       setSuccess(data.synced
-        ? editor.mode === "create" ? "Producto creado en Meta." : "Producto actualizado en Meta."
+        ? editor.mode === "create" ? "Producto creado y relación local con Dropi guardada." : "Producto actualizado y relación local con Dropi guardada."
         : "Meta guardó el producto, pero no se pudo actualizar la vista. Pulsa «Sincronizar» para recargarla.");
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "No se pudo guardar el producto.");
