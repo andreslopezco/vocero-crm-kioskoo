@@ -25,9 +25,14 @@
   fresco; el prompt describe el uso solo cuando la flag está encendida.
 - El servidor vuelve a resolver todos los IDs contra la copia vigente y
   construye `catalog_id` en servidor.
-- 1 elemento: mensaje `product`; 2–30: `interactive.product_list`.
-- Si falla el transporte nativo, WhatsApp recibe texto e imágenes externas del
-  catálogo; otros canales reciben ficha textual con enlaces disponibles.
+- 1 elemento: `interactive.product`; 2–30: `interactive.product_list` con
+  encabezado, cuerpo breve y selección validada.
+- Si falla el transporte nativo, WhatsApp recibe nombre/precio e imágenes
+  externas del catálogo; otros canales reciben el mismo resumen conciso.
+- Las peticiones generales muestran hasta 8 categorías reales y preguntan cuál
+  interesa; sin categorías publicadas, preguntan necesidad, uso o presupuesto.
+- Tras esa elección, el agente envía como máximo 3 productos coherentes. Una
+  categoría más amplia exige otro criterio antes de seleccionar tarjetas.
 - Reutilizar `prepareSend`, `callGraphSend` y persistencia existentes.
 
 ## Verificación

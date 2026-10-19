@@ -1,7 +1,7 @@
 import type { schema } from "@/lib/db";
 import type { CatalogSnapshot } from "@/server/catalog/service";
 import { CHANNEL_LABEL, type Channel } from "@/lib/channels";
-import { customerFacingCatalogAttributes, customerFacingCatalogDescription } from "@/server/catalog/context";
+import { customerFacingCatalogAttributes, customerFacingCatalogDescription, type CatalogCategoryGroup } from "@/server/catalog/context";
 
 type AgentProfile = typeof schema.agentProfile.$inferSelect;
 type KbEntry = typeof schema.kbEntry.$inferSelect;
@@ -47,6 +47,7 @@ export function buildAgentSystemPrompt(input: {
   catalogEnabled?: boolean;
   channel?: Channel;
   catalog?: CatalogSnapshot | null;
+  catalogCategories?: CatalogCategoryGroup[];
 }): string {
   const { profile } = input;
   const stageNames = input.stages.map((s) => s.name).join(" | ");
@@ -66,7 +67,7 @@ export function buildAgentSystemPrompt(input: {
   const catalogEnabled = input.catalogEnabled ?? Boolean(input.catalog);
   const catalog = input.catalog;
   const catalogLines = catalog
-    ? ['- {"action":"send_products","retailerIds":["..."],"reply":"..."} — recomendar productos disponibles; WhatsApp intenta tarjeta/lista nativa y los demás canales responden con texto.']
+    ? ['- {"action":"send_products","retailerIds":["..."],"reply":"..."} — enviar una selección breve de productos disponibles; WhatsApp intenta tarjeta/lista nativa y los demás canales responden con un resumen.']
     : [];
   const catalogRules = catalogEnabled
     ? [
@@ -83,9 +84,16 @@ export function buildAgentSystemPrompt(input: {
           description: customerFacingCatalogDescription(product),
           attributes: customerFacingCatalogAttributes(product.attributes),
         }))),
+        input.catalogCategories?.length
+          ? `Categorías reales del catálogo: ${JSON.stringify(input.catalogCategories)}`
+          : "El catálogo no publica categorías utilizables: no inventes ninguna.",
         "Los retailerId son únicamente para la acción y availability es un dato interno: nunca los incluyas en el mensaje al cliente. Usa solo los datos comerciales de este catálogo; no inventes propiedades, precios o disponibilidad. No incluyas enlaces ni URLs en la respuesta: el sistema gestiona las imágenes de WhatsApp por separado.",
-        `Si el cliente pide ver/comprar productos, usa send_products con retailerId exactos. ${input.channel === "whatsapp" ? "El servidor intenta tarjeta nativa y, si Meta no la admite, envía texto e imágenes disponibles." : "Este canal no usa tarjeta nativa: el servidor envía la ficha del producto como texto y no expone enlaces internos del catálogo."}`,
-        "Máximo 5 productos por respuesta; nunca inventes IDs. Si no hay coincidencia clara, pregunta qué busca. No ofrezcas productos fuera de stock ni ausentes del snapshot.",
+        `Si el cliente pide ver/comprar productos, usa send_products con retailerId exactos. ${input.channel === "whatsapp" ? "El servidor intenta tarjeta nativa y, si Meta no la admite, envía un resumen breve e imágenes disponibles." : "Este canal no usa tarjeta nativa: el servidor envía solo nombre y precio, sin enlaces internos del catálogo."}`,
+        "En send_products, reply es solo una introducción corta y natural. No escribas allí nombres, precios, marcas, descripciones ni atributos: la tarjeta o el resumen los añade el servidor. Puedes omitir reply.",
+        "Ante una petición abierta de catálogo, NO uses send_products todavía: presenta únicamente categorías publicadas y pregunta cuál interesa. Si no hay categorías, pregunta qué busca, para qué lo necesita o qué presupuesto tiene; nunca inventes categorías.",
+        "Después de que el cliente elija una categoría o explique su necesidad, envía como máximo 3 productos relevantes y coherentes. Si la categoría tiene más opciones y no dio otro criterio, pide tipo, uso o presupuesto antes de elegir. Después de enviar, puedes ofrecer ver más.",
+        "Nunca inventes IDs. No repitas una lista y luego fichas de los mismos productos. Amplía marca, material, estado, descripción u otras características solo si el cliente las pide o necesita comparar.",
+        "Si no hay coincidencia clara, pregunta qué busca. No ofrezcas productos fuera de stock ni ausentes del snapshot.",
         ] : [
           "No hay snapshot fresco de productos en este turno. No afirmes disponibilidad, precio ni inventario; pide más detalles o indica que el equipo confirmará la información.",
         ]),

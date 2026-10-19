@@ -50,7 +50,7 @@ const agendaActions = [
 const catalogActions = [
   z.object({
     action: z.literal("send_products"),
-    retailerIds: z.array(z.string().trim().min(1)).min(1).max(30),
+    retailerIds: z.array(z.string().trim().min(1)).min(1).max(3),
     reply: z.string().optional(),
   }),
 ] as const;

@@ -32,7 +32,13 @@ import { bookSlot, offerSlots } from "@/server/agenda/agent";
 import { getOffers, mapaDeHuecosParaModelo } from "@/server/agenda/offers";
 import { catalogEnabled } from "@/server/catalog/flag";
 import { getCatalogSnapshot, getFreshCatalog, isCatalogFresh, resolveInStockProducts } from "@/server/catalog/service";
-import { catalogContextForTurn, catalogProductsText, stripCatalogLinks } from "@/server/catalog/context";
+import {
+  catalogCategoryGroups,
+  catalogContextForTurn,
+  catalogGuidanceForTurn,
+  catalogProductsIntro,
+  catalogProductsText,
+} from "@/server/catalog/context";
 
 /**
  * Turno del agente (FR-021..FR-025).
@@ -257,6 +263,15 @@ export async function runAgentTurn(
       ? await getCatalogSnapshot(organizationId).then((snapshot) => isCatalogFresh(snapshot) ? snapshot : null)
       : await getFreshCatalog(organizationId)
     : null;
+  const catalogCategories = catalog ? catalogCategoryGroups(catalog) : [];
+  const catalogGuidance = catalog && lastInbound.text
+    ? catalogGuidanceForTurn(catalog, lastInbound.text)
+    : null;
+  if (catalogGuidance) {
+    if (conversation.isTest) await persistTestOutbound(conversation, catalogGuidance);
+    else await deliverReply(conversation, catalogGuidance);
+    return leido;
+  }
   const catalogContext = catalog ? catalogContextForTurn(catalog, lastInbound.text ?? "") : null;
 
   /**
@@ -285,7 +300,7 @@ export async function runAgentTurn(
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: buildAgentSystemPrompt({ profile, kb, stages, agenda, catalogEnabled: catalogIsEnabled, channel: conversation.channel, catalog: catalogContext }),
+      content: buildAgentSystemPrompt({ profile, kb, stages, agenda, catalogEnabled: catalogIsEnabled, channel: conversation.channel, catalog: catalogContext, catalogCategories }),
     },
     ...history
       .filter((m) => m.text)
@@ -325,9 +340,11 @@ export async function runAgentTurn(
       if (!selected) {
         action = degradeAction(action);
       } else if (conversation.isTest) {
-        await persistTestOutbound(conversation, catalogProductsText(selected, conversation.channel, action.reply));
+        const intro = catalogProductsIntro(selected, action.reply);
+        await persistTestOutbound(conversation, catalogProductsText(selected, conversation.channel, intro, "summary"));
         return leido;
       } else {
+        const intro = catalogProductsIntro(selected, action.reply);
         if (conversation.channel === "whatsapp") {
           let nativeSent = false;
           try {
@@ -335,6 +352,7 @@ export async function runAgentTurn(
               conversationId,
               organizationId,
               retailerIds: action.retailerIds,
+              bodyText: intro,
               aiGenerated: true,
             });
             nativeSent = true;
@@ -342,13 +360,11 @@ export async function runAgentTurn(
             console.warn(`[agente] tarjeta nativa no disponible; se usará texto: ${err instanceof Error ? err.message : "error"}`);
           }
           if (nativeSent) {
-            const reply = action.reply ? stripCatalogLinks(action.reply) : "";
-            if (reply) await deliverReply(conversation, reply);
             return leido;
           }
         }
 
-        const productText = catalogProductsText(selected, conversation.channel, action.reply);
+        const productText = catalogProductsText(selected, conversation.channel, intro, "summary");
         try {
           await deliverReply(conversation, productText);
         } catch (err) {
