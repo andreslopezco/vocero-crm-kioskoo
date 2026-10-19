@@ -18,6 +18,7 @@ const suggestionSchema = z.object({
 
 const requestSchema = z.object({
   draft: z.string().max(4000).optional(),
+  guidance: z.string().trim().max(2000).optional(),
 });
 
 export const POST = withAuth(async (session, req: Request, ctx: Params) => {
@@ -95,6 +96,7 @@ export const POST = withAuth(async (session, req: Request, ctx: Params) => {
     contactName: conversation.contact.name,
     transcript,
     draft: body.data.draft,
+    guidance: body.data.guidance,
   });
 
   const result = await chatJson(suggestionSchema, messages, {

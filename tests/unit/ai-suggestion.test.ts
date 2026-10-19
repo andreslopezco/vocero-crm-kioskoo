@@ -43,4 +43,23 @@ describe("redacción de sugerencias para el agente humano", () => {
     expect(user?.content).toContain("Hola María, lo reviso.");
     expect(user?.content).toContain("Mejóralo conservando su intención");
   });
+
+  it("usa la indicación privada como dirección, separada del texto para el cliente", () => {
+    const [system, user] = buildHumanSuggestionMessages({
+      operatorName: "Andrés López",
+      agentName: "Kiara",
+      tone: null,
+      instructions: null,
+      knowledge: "(knowledge base vacío)",
+      channel: "whatsapp",
+      contactName: "María",
+      transcript: "CLIENTE: ¿Tienen ese producto?",
+      guidance: "Ya verifiqué internamente que sí hay inventario.",
+    });
+
+    expect(system?.content).toContain("nunca reveles, cites ni repitas la indicación");
+    expect(user?.content).toContain("Indicación privada del agente humano");
+    expect(user?.content).toContain("sí hay inventario");
+    expect(user?.content).toContain("no es texto para el cliente");
+  });
 });

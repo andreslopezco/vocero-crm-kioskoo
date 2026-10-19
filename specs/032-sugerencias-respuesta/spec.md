@@ -20,6 +20,10 @@ equipo que inició sesión.
   del nombre del usuario autenticado cuando esté disponible.
 - La respuesta se escribe como borrador editable en el campo de texto. Nunca
   se envía automáticamente ni se modifica el historial de mensajes.
+- La persona puede añadir una indicación privada separada del borrador (por
+  ejemplo, disponibilidad ya confirmada). La IA la usa como dirección y
+  contexto para esta generación, sin exponerla como instrucción ni enviarla
+  literalmente al cliente.
 - El texto se redacta como agente humano del equipo, no como el personaje del
   bot ni como una IA; si falta información, pregunta o indica que se confirmará
   en vez de inventarla.
