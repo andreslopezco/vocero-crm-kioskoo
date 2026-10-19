@@ -270,6 +270,12 @@ paquete de GHCR es privado, agrega en Dokploy un registry con un token que
 tenga permiso de lectura de paquetes. La imagen de staging se construye para
 `linux/amd64` y lleva el SHA de Git en `SOURCE_COMMIT`.
 
+En cada push a `main`, GitHub Actions también publica la imagen de producción
+como `ghcr.io/andreslopezco/vocero-crm-kioskoo:latest` y como etiqueta
+inmutable `:sha-<commit>`. Descarga la versión actual con `docker pull
+ghcr.io/andreslopezco/vocero-crm-kioskoo:latest`; usa la etiqueta SHA para fijar
+una versión concreta.
+
 ### 0. Apunta tu dominio
 
 Crea un registro **A** de `crm.tudominio.com` hacia la IP del VPS y espera a
