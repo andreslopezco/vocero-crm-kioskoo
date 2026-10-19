@@ -64,7 +64,7 @@ export type CatalogProductMutation = {
   price: string;
   currency: string;
   brand: string;
-  imageUrl: string;
+  imageUrls: string[];
   url: string;
   category: string;
   material: string;
@@ -83,7 +83,8 @@ export function catalogProductGraphPayload(product: CatalogProductMutation, mode
     condition: product.condition,
     price: `${product.price} ${product.currency}`,
     brand: product.brand,
-    image_url: product.imageUrl,
+    image_url: product.imageUrls[0],
+    additional_image_urls: product.imageUrls.slice(1),
     url: product.url,
     category: product.category,
     material: product.material,

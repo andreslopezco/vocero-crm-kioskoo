@@ -19,7 +19,7 @@ export const catalogProductMutationSchema = z.object({
     .refine((value) => Number(value) > 0, "El precio debe ser mayor a cero"),
   currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()),
   brand: z.string().trim().max(100),
-  imageUrl: publicHttpsUrl,
+  imageUrls: z.array(publicHttpsUrl).min(1, "Agrega al menos una imagen").max(10, "WhatsApp permite hasta 10 imágenes por producto"),
   url: publicHttpsUrl,
   category: z.string().trim().max(200),
   material: z.string().trim().max(200),

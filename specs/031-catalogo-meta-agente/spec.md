@@ -72,8 +72,13 @@ arbitrario ni mantener una copia de inventario independiente.
 - Cada organización solo lee y modifica su snapshot; desconectar WhatsApp
   elimina el snapshot asociado.
 - Crear y editar usan el catálogo vinculado descubierto en servidor; requieren
-  SKU, nombre, descripción, disponibilidad, condición, precio/moneda e imagen
-  y URL HTTPS. El SKU es inmutable tras la creación.
+  SKU, nombre, descripción, disponibilidad, condición, precio/moneda, al menos
+  una foto y URL HTTPS del producto. El SKU es inmutable tras la creación.
+- El editor permite subir hasta 10 fotos por producto (JPEG/PNG, máximo 8 MB y
+  mínimo 500 × 500 px cada una), elegir la principal y reordenarlas. Vocero
+  conserva una copia en `MEDIA_DIR` y expone una URL HTTPS firmada para que Meta
+  importe la imagen en `image_url`/`additional_image_urls`; no se aceptan URLs de
+  imagen escritas manualmente en el formulario.
 - Si Meta acepta una escritura pero falla la resincronización, la UI informa
   que el cambio quedó guardado y permite sincronizar de nuevo.
 

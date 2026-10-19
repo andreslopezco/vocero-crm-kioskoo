@@ -3,6 +3,7 @@ import { agentActionSchema, agentActionSchemaFor } from "@/server/ai/actions";
 import { buildAgentSystemPrompt } from "@/server/ai/prompts";
 import { parseCatalogFlag } from "@/server/catalog/flag";
 import { catalogProductMutationSchema } from "@/server/catalog/input";
+import { CATALOG_IMAGE_MAX_BYTES, validateCatalogImage } from "@/server/catalog/images";
 import { catalogProductGraphPayload, resolveInStockProducts, type CatalogSnapshot } from "@/server/catalog/service";
 import { catalogContextForTurn, catalogProductsText } from "@/server/catalog/context";
 
@@ -48,7 +49,7 @@ describe("catálogo Meta del agente (031)", () => {
       price: "309900",
       currency: "cop",
       brand: "Keha",
-      imageUrl: "https://cdn.example.com/olla.jpg",
+      imageUrls: ["https://cdn.example.com/olla.jpg", "https://cdn.example.com/olla-lateral.png"],
       url: "https://tienda.example.com/olla",
       category: "Hogar",
       material: "Acero inoxidable",
@@ -59,7 +60,8 @@ describe("catálogo Meta del agente (031)", () => {
     const parsed = catalogProductMutationSchema.safeParse(input);
     expect(parsed.success).toBe(true);
     if (parsed.success) expect(parsed.data.currency).toBe("COP");
-    expect(catalogProductMutationSchema.safeParse({ ...input, imageUrl: "http://cdn.example.com/olla.jpg" }).success).toBe(false);
+    expect(catalogProductMutationSchema.safeParse({ ...input, imageUrls: ["http://cdn.example.com/olla.jpg"] }).success).toBe(false);
+    expect(catalogProductMutationSchema.safeParse({ ...input, imageUrls: Array(11).fill("https://cdn.example.com/olla.jpg") }).success).toBe(false);
     expect(catalogProductMutationSchema.safeParse({ ...input, url: "https://user:password@tienda.example.com" }).success).toBe(false);
     expect(catalogProductMutationSchema.safeParse({ ...input, price: "0" }).success).toBe(false);
   });
@@ -74,7 +76,7 @@ describe("catálogo Meta del agente (031)", () => {
       price: "309900",
       currency: "COP",
       brand: "Keha",
-      imageUrl: "https://cdn.example.com/olla.jpg",
+      imageUrls: ["https://cdn.example.com/olla.jpg", "https://cdn.example.com/olla-lateral.jpg"],
       url: "https://tienda.example.com/olla",
       category: "Hogar",
       material: "Acero inoxidable",
@@ -89,10 +91,25 @@ describe("catálogo Meta del agente (031)", () => {
       retailer_id: "SKU-OLLAS-01",
       price: "309900 COP",
       image_url: "https://cdn.example.com/olla.jpg",
+      additional_image_urls: ["https://cdn.example.com/olla-lateral.jpg"],
       material: "Acero inoxidable",
     });
     expect(updatePayload.allow_upsert).toBe(true);
     expect(createPayload).not.toHaveProperty("catalog_id");
+  });
+
+  it("valida tamaño, formato y dimensiones de las imágenes Meta", () => {
+    const png = new Uint8Array(33);
+    png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+    png.set([0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52], 8);
+    new DataView(png.buffer).setUint32(16, 500);
+    new DataView(png.buffer).setUint32(20, 500);
+    expect(validateCatalogImage(png, "image/png")).toMatchObject({ width: 500, height: 500, mimeType: "image/png" });
+    expect(() => validateCatalogImage(png, "image/webp")).toThrow("JPEG o PNG");
+    expect(() => validateCatalogImage(new Uint8Array(CATALOG_IMAGE_MAX_BYTES + 1), "image/png")).toThrow("8 MB");
+    const small = new Uint8Array(png);
+    new DataView(small.buffer).setUint32(16, 499);
+    expect(() => validateCatalogImage(small, "image/png")).toThrow("500 × 500");
   });
 
   it("la bandera está apagada por omisión y solo acepta valores explícitos", () => {
@@ -182,7 +199,7 @@ describe("catálogo Meta del agente (031)", () => {
       [{
         ...product,
         description: "Olla de acero. https://tienda.example.com/olla",
-        imageUrl: "https://cdn.example.com/olla.jpg",
+      imageUrl: "https://cdn.example.com/olla.jpg",
         url: "https://tienda.example.com/olla",
         attributes: {
           material: "acero inoxidable",

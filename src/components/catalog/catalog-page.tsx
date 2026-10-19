@@ -32,7 +32,7 @@ type ProductForm = {
   price: string;
   currency: string;
   brand: string;
-  imageUrl: string;
+  imageUrls: string[];
   url: string;
   category: string;
   material: string;
@@ -44,7 +44,7 @@ type ProductEditor = { mode: "create" | "edit"; product?: Product };
 
 const EMPTY_FORM: ProductForm = {
   retailerId: "", name: "", description: "", availability: "in stock", condition: "new",
-  price: "", currency: "COP", brand: "", imageUrl: "", url: "", category: "",
+  price: "", currency: "COP", brand: "", imageUrls: [], url: "", category: "",
   material: "", color: "", size: "", pattern: "",
 };
 
@@ -73,7 +73,12 @@ function formFromProduct(product: Product): ProductForm {
     price,
     currency,
     brand: product.brand ?? "",
-    imageUrl: product.imageUrl ?? "",
+    imageUrls: [...new Set([
+      product.imageUrl,
+      ...(Array.isArray(product.attributes.additional_image_urls)
+        ? product.attributes.additional_image_urls.filter((item): item is string => typeof item === "string")
+        : []),
+    ].filter((item): item is string => typeof item === "string" && item.startsWith("https://")))].slice(0, 10),
     url: product.url ?? "",
     category: value("category"),
     material: value("material"),
@@ -119,6 +124,7 @@ export function CatalogPage() {
   const [editor, setEditor] = useState<ProductEditor | null>(null);
   const [form, setForm] = useState<ProductForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
 
@@ -185,6 +191,45 @@ export function CatalogPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function uploadProductImages(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!files.length) return;
+    if (form.imageUrls.length + files.length > 10) {
+      setFormError("WhatsApp permite hasta 10 imágenes por producto. Quita alguna foto antes de agregar más.");
+      return;
+    }
+    setUploadingImages(true);
+    setFormError(null);
+    const urls = [...form.imageUrls];
+    try {
+      for (const file of files) {
+        const payload = new FormData();
+        payload.append("file", file);
+        const response = await fetch("/api/settings/catalog/images", { method: "POST", body: payload });
+        const data = await response.json() as { url?: string; error?: { message?: string } };
+        if (!response.ok || !data.url) throw new Error(data.error?.message ?? `No se pudo cargar ${file.name}.`);
+        urls.push(data.url);
+        setForm((current) => ({ ...current, imageUrls: [...urls] }));
+      }
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "No se pudieron cargar las imágenes.");
+    } finally {
+      setUploadingImages(false);
+    }
+  }
+
+  function makePrimaryImage(index: number) {
+    setForm((current) => ({
+      ...current,
+      imageUrls: [current.imageUrls[index]!, ...current.imageUrls.filter((_, itemIndex) => itemIndex !== index)],
+    }));
+  }
+
+  function removeProductImage(index: number) {
+    setForm((current) => ({ ...current, imageUrls: current.imageUrls.filter((_, itemIndex) => itemIndex !== index) }));
   }
 
   const filtered = useMemo(() => {
@@ -260,7 +305,9 @@ export function CatalogPage() {
                   </thead>
                   <tbody>
                     {filtered.map((product) => {
-                      const attributes = Object.entries(product.attributes).filter(([, value]) => value != null && showValue(value) !== "");
+                      const attributes = Object.entries(product.attributes).filter(([key, value]) =>
+                        value != null && showValue(value) !== "" && !["additional_image_urls", "image_cdn_urls", "additional_image_cdn_urls"].includes(key)
+                      );
                       const expanded = expandedProductId === product.retailerId;
                       return <Fragment key={product.retailerId}>
                         <tr className="border-t align-middle first:border-t-0">
@@ -347,14 +394,14 @@ export function CatalogPage() {
           />
         )}
       </div>
-      {editor && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-overlay p-4">
+        {editor && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-overlay p-4">
         <section role="dialog" aria-modal="true" aria-labelledby="catalog-product-title" className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-xl border bg-card shadow-xl">
           <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-card px-5 py-4">
             <div>
               <h3 id="catalog-product-title" className="text-base font-semibold">{editor.mode === "create" ? "Nuevo producto" : "Editar producto"}</h3>
               <p className="mt-1 text-xs text-text-3">Los cambios se guardan directamente en el catálogo de Meta.</p>
             </div>
-            <Button type="button" size="icon" variant="ghost" aria-label="Cerrar" disabled={saving} onClick={() => setEditor(null)}>
+            <Button type="button" size="icon" variant="ghost" aria-label="Cerrar" disabled={saving || uploadingImages} onClick={() => setEditor(null)}>
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -426,18 +473,36 @@ export function CatalogPage() {
                 <Input maxLength={100} value={form.pattern} disabled={saving} onChange={(event) => setForm({ ...form, pattern: event.target.value })} placeholder="Opcional" />
               </label>
             </div>
-            <label className="block space-y-1.5 text-sm font-medium">
-              <span>URL HTTPS de la imagen principal</span>
-              <Input required type="url" value={form.imageUrl} disabled={saving} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} placeholder="https://…" />
-            </label>
+            <div className="space-y-2">
+              <label className="block space-y-1.5 text-sm font-medium">
+                <span>Fotos del producto</span>
+                <Input type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple disabled={saving || uploadingImages || form.imageUrls.length >= 10} onChange={(event) => void uploadProductImages(event)} />
+                <span className="block text-xs font-normal text-text-3">JPEG o PNG · hasta 10 fotos · máximo 8 MB y mínimo 500 × 500 px cada una. Meta descargará las fotos y las incorporará al catálogo.</span>
+              </label>
+              {form.imageUrls.length > 0 && <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+                {form.imageUrls.map((imageUrl, index) => <div key={imageUrl} className="overflow-hidden rounded-lg border bg-subtle">
+                  <div className="relative aspect-square bg-card">
+                    {/* La URL es una imagen validada del catálogo o una subida con firma de acceso público para Meta. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={imageUrl} alt={`Foto ${index + 1} de ${form.name || "producto"}`} referrerPolicy="no-referrer" className="h-full w-full object-contain" />
+                    {index === 0 && <span className="absolute left-1 top-1 rounded bg-card/90 px-1.5 py-0.5 text-[10px] font-semibold">Principal</span>}
+                  </div>
+                  <div className="flex gap-1 p-1.5">
+                    {index > 0 && <Button type="button" size="sm" variant="ghost" className="h-7 flex-1 px-1 text-[10px]" disabled={saving || uploadingImages} onClick={() => makePrimaryImage(index)}>Hacer principal</Button>}
+                    <Button type="button" size="sm" variant="ghost" className="h-7 flex-1 px-1 text-[10px] text-danger-text" disabled={saving || uploadingImages || form.imageUrls.length <= 1} onClick={() => removeProductImage(index)}>Quitar</Button>
+                  </div>
+                </div>)}
+              </div>}
+              {uploadingImages && <p role="status" className="text-xs text-muted-foreground">Cargando imágenes…</p>}
+            </div>
             <label className="block space-y-1.5 text-sm font-medium">
               <span>URL HTTPS del producto</span>
               <Input required type="url" value={form.url} disabled={saving} onChange={(event) => setForm({ ...form, url: event.target.value })} placeholder="https://…" />
             </label>
             <div className="flex justify-end gap-2 border-t pt-4">
-              <Button type="button" variant="secondary" disabled={saving} onClick={() => setEditor(null)}>Cancelar</Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? "Guardando…" : editor.mode === "create" ? "Crear producto" : "Guardar cambios"}
+              <Button type="button" variant="secondary" disabled={saving || uploadingImages} onClick={() => setEditor(null)}>Cancelar</Button>
+              <Button type="submit" disabled={saving || uploadingImages || form.imageUrls.length === 0}>
+                {saving ? "Guardando…" : uploadingImages ? "Cargando imágenes…" : editor.mode === "create" ? "Crear producto" : "Guardar cambios"}
               </Button>
             </div>
           </form>

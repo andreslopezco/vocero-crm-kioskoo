@@ -23,6 +23,15 @@
   validados y un catálogo sincronizado. Catálogo y token salen de la conexión
   guardada por organización, nunca del navegador. Crear desactiva upsert; editar
   solo admite identificadores ya presentes en el snapshot.
+- `POST /api/settings/catalog/images` recibe un archivo por petición. Valida
+  JPEG/PNG real, hasta 8 MB y dimensiones mínimas de 500×500 px; persiste en
+  `MEDIA_DIR` y responde una URL HTTPS firmada. `GET /api/catalog-images` solo
+  sirve el archivo con firma válida para que los servidores de Meta lo importen.
+- El editor limita a 10 fotos por producto, incluida la principal, según la
+  capacidad documentada para catálogos de WhatsApp. El API de producto recibe
+  URLs públicas y las manda a `image_url` y `additional_image_urls`; Meta no
+  recibe un binario multipart por este endpoint. Las copias de origen deben
+  conservarse para que Meta pueda reconsultarlas.
 - Flag `KIOSKOO_CATALOGO`; el prompt del agente no menciona catálogo cuando la
   flag está apagada. Encendida, describe la función incluso si no hay snapshot;
   la acción `send_products` se añade solo si existe snapshot fresco.
@@ -47,10 +56,8 @@ En WhatsApp la acción intenta primero el formato nativo, tras la prevalidación
 existente de destino, ventana y credenciales. Si falla, se envía una ficha de
 texto y luego las imágenes HTTPS presentes en el snapshot. En otros canales no
 se intenta tarjeta: se envían únicamente los datos comerciales como texto, sin
-exponer URLs de imagen/producto. Las imágenes externas se guardan como
-referencias de medio para previsualizar en el hilo, no se descargan a
-almacenamiento propio. Laboratorio persiste una simulación y no ejecuta ninguna
-solicitud Graph.
+exponer URLs de imagen/producto. Laboratorio persiste una simulación y no
+ejecuta ninguna solicitud Graph.
 
 La ficha textual y el prompt solo incluyen atributos comerciales en español
 (marca, precio, descripción, categoría, condición, material, tamaño, color,
