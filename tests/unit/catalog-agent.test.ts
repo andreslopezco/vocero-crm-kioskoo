@@ -71,7 +71,7 @@ describe("catálogo Meta del agente (031)", () => {
     expect(catalogProductMutationSchema.safeParse({ ...input, price: "0" }).success).toBe(false);
   });
 
-  it("mapea el precio a centavos y no incluye imágenes en las mutaciones", () => {
+  it("mapea el precio a centavos al editar y no incluye imágenes", () => {
     const parsed = catalogProductMutationSchema.parse({
       retailerId: "SKU-OLLAS-01",
       name: "Set de ollas",
@@ -89,25 +89,22 @@ describe("catálogo Meta del agente (031)", () => {
       size: "5 y 7 litros",
       pattern: "",
     });
-    const createPayload = catalogProductGraphPayload(parsed, "create");
-    const updatePayload = catalogProductGraphPayload(parsed, "update");
-    expect(createPayload).toMatchObject({
-      allow_upsert: false,
+    const updatePayload = catalogProductGraphPayload(parsed);
+    expect(updatePayload).toMatchObject({
       retailer_id: "SKU-OLLAS-01",
       price: 30990000,
       currency: "COP",
       material: "Acero inoxidable",
       quantity_to_sell_on_facebook: 100,
     });
-    expect(createPayload).not.toHaveProperty("image_url");
-    expect(createPayload).not.toHaveProperty("additional_image_urls");
-    expect(catalogProductGraphPayload({ ...parsed, price: "309900.50" }, "create").price).toBe(30990050);
-    expect(updatePayload).not.toHaveProperty("allow_upsert");
+    expect(updatePayload).not.toHaveProperty("image_url");
+    expect(updatePayload).not.toHaveProperty("additional_image_urls");
+    expect(catalogProductGraphPayload({ ...parsed, price: "309900.50" }).price).toBe(30990050);
     expect(updatePayload).not.toHaveProperty("image_url");
     expect(updatePayload).not.toHaveProperty("additional_image_urls");
     expect(createPayload).not.toHaveProperty("catalog_id");
     expect(catalogProductMutationSchema.safeParse({ ...parsed, inventory: "1.5" }).success).toBe(false);
-    expect(catalogProductGraphPayload({ ...parsed, inventory: "" }, "update")).not.toHaveProperty("quantity_to_sell_on_facebook");
+    expect(catalogProductGraphPayload({ ...parsed, inventory: "" })).not.toHaveProperty("quantity_to_sell_on_facebook");
   });
 
   it("prefiere la URL CDN más reciente de Meta para mostrar la imagen del producto", () => {
