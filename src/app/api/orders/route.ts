@@ -1,6 +1,6 @@
 import { apiError, withAuth } from "@/lib/api";
 import { dropiOrdersEnabled, dropiDisabledResponse } from "@/server/dropi/flag";
-import { assignDropiOrderToContact, dismissDropiOrder, DropiLinkError, listDropiOrders, refreshDropiOrders } from "@/server/dropi/linked-orders";
+import { assignDropiOrderToContact, dismissDropiOrder, DropiLinkError, listDropiOrders, refreshDropiOrders, restoreDropiOrder } from "@/server/dropi/linked-orders";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +40,22 @@ export const DELETE = withAuth(async (session, request: Request) => {
     console.error("[orders] dismiss failed", error instanceof Error ? error.message : "unknown");
     const message = error instanceof DropiLinkError ? error.message : "No se pudo eliminar el pedido de Vocero.";
     return apiError(422, "order_dismiss_failed", message);
+  }
+});
+
+export const PUT = withAuth(async (session, request: Request) => {
+  if (!dropiOrdersEnabled()) return dropiDisabledResponse();
+  try {
+    const body = await request.json().catch(() => null) as { orderId?: unknown } | null;
+    if (!body || typeof body.orderId !== "string") {
+      return apiError(422, "invalid_order_id", "El ID del pedido es obligatorio.");
+    }
+    await restoreDropiOrder(session.organizationId, body.orderId);
+    return Response.json({ restored: true });
+  } catch (error) {
+    console.error("[orders] restore failed", error instanceof Error ? error.message : "unknown");
+    const message = error instanceof DropiLinkError ? error.message : "No se pudo restaurar el pedido.";
+    return apiError(422, "order_restore_failed", message);
   }
 });
 
