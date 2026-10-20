@@ -92,6 +92,27 @@ export async function callDropiTool(organizationId: string, name: string, args: 
   return withDropiClient(organizationId, (client) => client.callTool({ name, arguments: args }));
 }
 
+export async function callDropiToolPages(
+  organizationId: string,
+  name: string,
+  argsForPage: (page: number) => Record<string, unknown>,
+  hasMore: (result: CallToolResult) => boolean,
+  maxPages = 100
+): Promise<CallToolResult[]> {
+  return withDropiClient(organizationId, async (client) => {
+    const tools = (await client.listTools()).tools;
+    if (!tools.some((tool) => tool.name === name)) throw new Error(`Dropi no expone la herramienta ${name}.`);
+    const pages: CallToolResult[] = [];
+    for (let page = 0; page < maxPages; page += 1) {
+      const result = await client.callTool({ name, arguments: argsForPage(page) });
+      if (result.isError) throw new Error(`Dropi falló al consultar la página ${page + 1} de pedidos.`);
+      pages.push(result);
+      if (!hasMore(result)) return pages;
+    }
+    throw new Error(`La lista de pedidos de Dropi excede el límite seguro de ${maxPages * 100} registros por sincronización.`);
+  });
+}
+
 async function withDropiClient<T>(organizationId: string, task: (client: Client) => Promise<T>): Promise<T> {
   const row = await import("@/server/dropi/credentials").then((m) => m.getDropiConnection(organizationId));
   if (!row) throw new Error("Dropi no está conectado.");
