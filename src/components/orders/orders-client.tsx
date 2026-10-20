@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertCircle,
   MoreHorizontal,
@@ -122,6 +123,7 @@ export function OrdersClient() {
   const [notice, setNotice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [actionOrderId, setActionOrderId] = useState<string | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [assignmentOrderId, setAssignmentOrderId] = useState<string | null>(null);
   const [contactQuery, setContactQuery] = useState("");
@@ -364,7 +366,7 @@ export function OrdersClient() {
                     </tr>
                   </thead>
                   <tbody>
-                    {orders.map((order, index) => (
+                    {orders.map((order) => (
                       <tr key={order.providerOrderId ?? order.shopOrderId ?? order.orderId} className="border-t align-middle first:border-t-0">
                         <td className="min-w-0 px-3 py-3 sm:px-4">
                           <p className="break-all font-semibold leading-5">
@@ -424,14 +426,29 @@ export function OrdersClient() {
                               aria-label={`Acciones para pedido ${order.providerOrderId ?? order.shopOrderId ?? order.orderId}`}
                               aria-haspopup="menu"
                               aria-expanded={actionOrderId === (order.providerOrderId ?? order.shopOrderId ?? order.orderId)}
-                              onClick={() => setActionOrderId((current) => current === (order.providerOrderId ?? order.shopOrderId ?? order.orderId) ? null : (order.providerOrderId ?? order.shopOrderId ?? order.orderId))}
+                              onClick={(event) => {
+                                const id = order.providerOrderId ?? order.shopOrderId ?? order.orderId;
+                                if (actionOrderId === id) {
+                                  setActionOrderId(null);
+                                  setMenuPosition(null);
+                                  return;
+                                }
+                                const rect = event.currentTarget.getBoundingClientRect();
+                                const estimatedHeight = showDeleted ? 56 : order.source === "dropi" && !order.contactId ? 280 : 56;
+                                const top = window.innerHeight - rect.bottom > estimatedHeight + 12
+                                  ? rect.bottom + 4
+                                  : Math.max(8, rect.top - estimatedHeight - 4);
+                                setMenuPosition({ top, right: Math.max(8, window.innerWidth - rect.right) });
+                                setActionOrderId(id);
+                              }}
                             >
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
-                            {actionOrderId === (order.providerOrderId ?? order.shopOrderId ?? order.orderId) && (
+                            {actionOrderId === (order.providerOrderId ?? order.shopOrderId ?? order.orderId) && menuPosition && createPortal(
                               <div
                                 role="menu"
-                                className={`absolute right-0 z-30 rounded-md border bg-card p-1 shadow-lg ${assignmentOrderId === (order.providerOrderId ?? order.shopOrderId ?? order.orderId) ? "w-64" : "min-w-44"} ${index === 0 ? "top-full mt-1" : "bottom-full mb-1"}`}
+                                className={`fixed z-[1000] max-h-[calc(100vh-1rem)] overflow-y-auto rounded-md border bg-card p-1 shadow-lg ${assignmentOrderId === (order.providerOrderId ?? order.shopOrderId ?? order.orderId) ? "w-64" : "min-w-44"}`}
+                                style={{ top: menuPosition.top, right: menuPosition.right, maxWidth: "calc(100vw - 1rem)" }}
                               >
                                 {showDeleted ? (
                                   <button
@@ -510,7 +527,8 @@ export function OrdersClient() {
                                 </button>
                                   </>
                                 )}
-                              </div>
+                              </div>,
+                              document.body
                             )}
                           </div>
                         </td>
