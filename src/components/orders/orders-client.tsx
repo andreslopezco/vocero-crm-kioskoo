@@ -93,6 +93,21 @@ const PENDING_STATUSES = new Set([
   "en alistamiento en oficina de origen",
 ]);
 
+const ATTENTION_STATUSES = new Set([
+  "error generando guia",
+  "guia no existe",
+  "no transmitida",
+  "sin movimientos",
+  "novedad",
+  "en investigacion",
+  "cerrado por incidencia ver causa",
+  "fisico no recibido",
+]);
+
+function isAttentionRequired(value: string | null) {
+  return ATTENTION_STATUSES.has(normalizedStatus(value));
+}
+
 function isPending(value: string | null) {
   return PENDING_STATUSES.has(normalizedStatus(value));
 }
@@ -357,6 +372,7 @@ export function OrdersClient() {
 
   const ordersForSummary = data?.orders ?? [];
   const pendingConfirmation = ordersForSummary.filter((order) => isPending(order.status)).length;
+  const requiresAttention = ordersForSummary.filter((order) => isAttentionRequired(order.status)).length;
   const inTransit = ordersForSummary.filter((order) => isInTransit(order.status)).length;
   const delivered = ordersForSummary.filter((order) => isDelivered(order.status)).length;
   const unsuccessful = ordersForSummary.filter((order) => isUnsuccessful(order.status)).length;
@@ -452,14 +468,14 @@ export function OrdersClient() {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <Card>
             <CardContent className="flex items-center gap-3 pt-5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-tint text-brand-text"><PackageCheck className="h-4 w-4" /></span>
-              <div><p className="text-xs font-medium text-text-3">Pedidos registrados</p><p className="text-xl font-bold">{loading ? "—" : ordersForSummary.length}</p></div>
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-warning-tint text-warning-text"><Clock3 className="h-4 w-4" /></span>
+              <div><p className="text-xs font-medium text-text-3">Pendientes</p><p className="text-xl font-bold">{loading ? "—" : pendingConfirmation}</p></div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="flex items-center gap-3 pt-5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-warning-tint text-warning-text"><Clock3 className="h-4 w-4" /></span>
-              <div><p className="text-xs font-medium text-text-3">Pendientes</p><p className="text-xl font-bold">{loading ? "—" : pendingConfirmation}</p></div>
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-warning-tint text-warning-text"><AlertCircle className="h-4 w-4" /></span>
+              <div><p className="text-xs font-medium text-text-3">Requieren atención</p><p className="text-xl font-bold">{loading ? "—" : requiresAttention}</p></div>
             </CardContent>
           </Card>
           <Card>
@@ -484,7 +500,7 @@ export function OrdersClient() {
 
         <Card>
           <CardHeader className="gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div><CardTitle>Todos los pedidos</CardTitle><CardDescription>Los pedidos quedan asociados a su contacto y se ordenan por actividad reciente.</CardDescription></div>
+            <div><CardTitle>Todos los pedidos <span className="ml-2 text-sm font-medium text-text-3">{loading ? "" : `· ${ordersForSummary.length} registrados`}</span></CardTitle><CardDescription>Los pedidos quedan asociados a su contacto y se ordenan por actividad reciente.</CardDescription></div>
             <div className="relative w-full sm:max-w-xs">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
               <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar pedido, contacto o producto" className="pl-9" aria-label="Buscar pedidos" />
