@@ -143,12 +143,15 @@ describe("catálogo Meta del agente (031)", () => {
         orderCreationEnabled: true,
         tools: [{ name: "create_order", inputSchema: { type: "object" } }],
         productData: "id: 12345, name: Bolso de cuero",
-        catalogProducts: [{ retailerId: "SKU-01", name: "Bolso de cuero", dropiProductId: "12345" }],
+        catalogProducts: [{ retailerId: "SKU-01", name: "Bolso de cuero", dropiProductId: "12345", price: "120000", currency: "COP" }],
       },
     });
     expect(prompt).toContain("12345");
     expect(prompt).toContain("products[].id");
     expect(prompt).toContain("Nunca confirmes el pedido al cliente");
+    expect(prompt).toContain("DEBES invocar create_dropi_order en este turno");
+    expect(prompt).toContain("solicitud pendiente para revisión humana");
+    expect(prompt).toContain("price y currency del producto local vinculado");
     expect(prompt).not.toContain("move_stage a la etapa de interesados y confirma al cliente");
   });
 
