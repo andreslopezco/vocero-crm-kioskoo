@@ -354,3 +354,111 @@ export async function unlinkDropiOrderFromContact(organizationId: string, contac
     and(eq(schema.dropiOrderLink.contactId, contactId), eq(schema.dropiOrderLink.providerOrderId, orderId))
   ));
 }
+
+export type DropiOrganizationOrder = {
+  orderId: string;
+  providerOrderId: string | null;
+  shopOrderId: string | null;
+  contactId: string;
+  contactName: string;
+  contactPhone: string | null;
+  status: string | null;
+  trackingCode: string | null;
+  total: string | null;
+  currency: string | null;
+  items: { name: string; quantity: string | null }[];
+  updatedAt: string;
+  source: "linked" | "vocero";
+};
+
+function organizationOrderItems(value: unknown) {
+  return findArray(value, ["items", "products", "order_items", "details"])
+    .slice(0, 20)
+    .flatMap((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+      const name = textValue(findValue(entry, ["product_name", "name", "title", "product", "product_id", "id"]));
+      if (!name) return [];
+      return [{ name, quantity: textValue(findValue(entry, ["quantity", "qty"])) }];
+    });
+}
+
+/** Lista pedidos creados desde Vocero y pedidos de Dropi vinculados, dentro de la organización. */
+export async function listDropiOrders(organizationId: string) {
+  const db = getDb();
+  const [connection, linked, submissions] = await Promise.all([
+    getDropiConnection(organizationId),
+    db.select({
+      providerOrderId: schema.dropiOrderLink.providerOrderId,
+      snapshot: schema.dropiOrderLink.snapshot,
+      updatedAt: schema.dropiOrderLink.updatedAt,
+      contactId: schema.contact.id,
+      contactName: schema.contact.name,
+      contactPhone: schema.contact.phone,
+    }).from(schema.dropiOrderLink)
+      .innerJoin(schema.contact, eq(schema.dropiOrderLink.contactId, schema.contact.id))
+      .where(scoped(schema.dropiOrderLink.organizationId, organizationId))
+      .orderBy(desc(schema.dropiOrderLink.updatedAt)),
+    db.select({
+      shopOrderId: schema.dropiOrderSubmission.shopOrderId,
+      providerOrderId: schema.dropiOrderSubmission.providerOrderId,
+      providerStatus: schema.dropiOrderSubmission.providerStatus,
+      status: schema.dropiOrderSubmission.status,
+      payload: schema.dropiOrderSubmission.payload,
+      updatedAt: schema.dropiOrderSubmission.updatedAt,
+      contactId: schema.contact.id,
+      contactName: schema.contact.name,
+      contactPhone: schema.contact.phone,
+    }).from(schema.dropiOrderSubmission)
+      .innerJoin(schema.contact, eq(schema.dropiOrderSubmission.contactId, schema.contact.id))
+      .where(scoped(schema.dropiOrderSubmission.organizationId, organizationId))
+      .orderBy(desc(schema.dropiOrderSubmission.updatedAt)),
+  ]);
+
+  const byProviderId = new Map<string, DropiOrganizationOrder>();
+  for (const row of linked) {
+    const snapshot = row.snapshot;
+    byProviderId.set(row.providerOrderId, {
+      orderId: row.providerOrderId,
+      providerOrderId: row.providerOrderId,
+      shopOrderId: null,
+      contactId: row.contactId,
+      contactName: row.contactName,
+      contactPhone: row.contactPhone,
+      status: textValue(findValue(snapshot, ["status", "order_status", "orderStatus"])),
+      trackingCode: textValue(findValue(snapshot, ["tracking_code", "trackingCode", "tracking_number", "guide"])),
+      total: textValue(findValue(snapshot, ["total", "total_amount", "grand_total", "order_total"])),
+      currency: textValue(findValue(snapshot, ["currency", "currency_code"])),
+      items: organizationOrderItems(snapshot),
+      updatedAt: row.updatedAt.toISOString(),
+      source: "linked",
+    });
+  }
+
+  const unlinked: DropiOrganizationOrder[] = [];
+  for (const row of submissions) {
+    if (row.providerOrderId && byProviderId.has(row.providerOrderId)) continue;
+    const items = organizationOrderItems(row.payload);
+    const payloadTotal = textValue(findValue(row.payload, ["total", "total_amount", "grand_total", "order_total"]));
+    const order: DropiOrganizationOrder = {
+      orderId: row.providerOrderId ?? row.shopOrderId,
+      providerOrderId: row.providerOrderId,
+      shopOrderId: row.shopOrderId,
+      contactId: row.contactId,
+      contactName: row.contactName,
+      contactPhone: row.contactPhone,
+      status: row.providerStatus ?? row.status,
+      trackingCode: textValue(findValue(row.payload, ["tracking_code", "trackingCode", "tracking_number", "guide"])),
+      total: payloadTotal,
+      currency: textValue(findValue(row.payload, ["currency", "currency_code"])),
+      items,
+      updatedAt: row.updatedAt.toISOString(),
+      source: "vocero",
+    };
+    if (row.providerOrderId) byProviderId.set(row.providerOrderId, order);
+    else unlinked.push(order);
+  }
+
+  const orders = [...byProviderId.values(), ...unlinked]
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return { connected: connection?.status === "connected", orders };
+}
