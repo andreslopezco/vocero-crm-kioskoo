@@ -61,10 +61,11 @@ function statusText(value: string | null) {
   return labels[status] ?? (value?.trim() || "Sin estado");
 }
 
-function statusVariant(value: string | null): "success" | "warning" | "destructive" | "secondary" {
+function statusVariant(value: string | null): "success" | "warning" | "attention" | "destructive" | "secondary" {
   const status = (value ?? "").trim().toLowerCase();
   if (/delivered|entregado|complete/.test(status)) return "success";
   if (/cancel|cancelado|reject|rechaz|devol|return|failed|error/.test(status)) return "destructive";
+  if (isAttentionRequired(value)) return "attention";
   if (/pending[ _-]*confirm|pendiente.*confirm|needs_review|review/.test(status)) return "warning";
   return "secondary";
 }
@@ -474,7 +475,7 @@ export function OrdersClient() {
           </Card>
           <Card>
             <CardContent className="flex items-center gap-3 pt-5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-warning-tint text-warning-text"><AlertCircle className="h-4 w-4" /></span>
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-attention-tint text-attention-text"><AlertCircle className="h-4 w-4" /></span>
               <div><p className="text-xs font-medium text-text-3">Requieren atención</p><p className="text-xl font-bold">{loading ? "—" : requiresAttention}</p></div>
             </CardContent>
           </Card>
