@@ -84,11 +84,11 @@ const PHONE_FIELD_KEYS = new Set([
 export function phoneFromFicha(raw: unknown): string | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   for (const [rawKey, value] of Object.entries(raw)) {
-    const key = rawKey.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const key = rawKey.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
     if (!PHONE_FIELD_KEYS.has(key) || (typeof value !== "string" && typeof value !== "number")) continue;
     const candidate = String(value).trim();
-    if (!candidate || !/^\\+?[\\d\\s().-]+$/.test(candidate)) continue;
-    const digits = candidate.replace(/\\D/g, "");
+    if (!candidate || !/^\+?[\d\s().-]+$/.test(candidate)) continue;
+    const digits = candidate.replace(/\D/g, "");
     if (digits.length >= 7 && digits.length <= 15) return digits;
   }
   return null;
