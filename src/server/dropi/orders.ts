@@ -48,6 +48,136 @@ export async function dropiPromptContext(organizationId: string, query: string) 
   };
 }
 
+
+type MappedOrderProduct = { retailerId: string; name: string; dropiProductId: string; price: string | null; currency: string | null };
+
+function normalizedFichaKey(value: string): string {
+  return value.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function fichaText(ficha: Record<string, string | number | boolean | null>, names: string[]): string | null {
+  const wanted = new Set(names.map(normalizedFichaKey));
+  for (const [key, value] of Object.entries(ficha)) {
+    if (!wanted.has(normalizedFichaKey(key)) || (typeof value !== "string" && typeof value !== "number")) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return null;
+}
+
+function parseCatalogOrderPrice(value: string | null): number | null {
+  if (!value) return null;
+  const raw = value.trim().replace(/[^0-9.,-]/g, "");
+  if (!raw || !/\\d/.test(raw)) return null;
+  const lastSeparator = Math.max(raw.lastIndexOf("."), raw.lastIndexOf(","));
+  let normalized = raw;
+  if (lastSeparator >= 0 && raw.length - lastSeparator - 1 <= 2) {
+    const decimal = raw.slice(lastSeparator + 1);
+    const whole = raw.slice(0, lastSeparator).replace(/[^0-9-]/g, "");
+    normalized = `${whole}.${decimal}`;
+  } else {
+    normalized = raw.replace(/[^0-9-]/g, "");
+  }
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+/**
+ * Respaldo determinista para la confirmación de un resumen de pedido.
+ * Solo arma el payload si toda la información está en la ficha y el SKU
+ * apunta a un producto local ya vinculado a Dropi.
+ */
+export function dropiPayloadFromConfirmedFicha(input: {
+  ficha: Record<string, string | number | boolean | null>;
+  catalogProducts: MappedOrderProduct[];
+  createOrderSchema: unknown;
+  rateType: string;
+}): Record<string, unknown> | null {
+  if (!input.rateType.trim()) return null;
+  const schemaDef = input.createOrderSchema as {
+    type?: string;
+    properties?: Record<string, unknown>;
+    required?: string[];
+  } | null;
+  if (!schemaDef || schemaDef.type !== "object") return null;
+  const properties = schemaDef.properties ?? {};
+  const propertyKey = (candidates: string[], source: Record<string, unknown> = properties) =>
+    Object.keys(source).find((key) => candidates.includes(normalizedFichaKey(key)));
+  const readProperty = (key: string) => properties[key] as {
+    items?: { properties?: Record<string, unknown>; required?: string[] };
+  } | undefined;
+
+  const sku = fichaText(input.ficha, ["sku", "retailerId", "productSku"]);
+  const interest = fichaText(input.ficha, ["producto interes", "producto", "product"]);
+  const normalizedSku = sku ? normalizedFichaKey(sku) : null;
+  const normalizedInterest = interest ? normalizedFichaKey(interest) : null;
+  const product = input.catalogProducts.find((item) =>
+    (normalizedSku && normalizedFichaKey(item.retailerId) === normalizedSku) ||
+    (normalizedInterest && normalizedFichaKey(item.name) === normalizedInterest)
+  );
+  if (!product) return null;
+  const productId = dropiProductIdFromAttributes({ [LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE]: product.dropiProductId });
+  const price = parseCatalogOrderPrice(product.price);
+  const quantityText = fichaText(input.ficha, ["cantidad", "quantity"]);
+  const quantity = quantityText && /^\\d+$/.test(quantityText) ? Number(quantityText) : NaN;
+  if (!productId || !price || !Number.isSafeInteger(quantity) || quantity <= 0) return null;
+
+  const fullName = fichaText(input.ficha, ["nombre completo", "nombre", "name"]);
+  const nameParts = fullName?.split(/\\s+/).filter(Boolean) ?? [];
+  if (nameParts.length < 2) return null;
+  const values: Record<string, unknown> = {};
+  const set = (candidates: string[], value: unknown) => {
+    const key = propertyKey(candidates);
+    if (key) values[key] = value;
+    return key;
+  };
+  set(["name", "firstName", "customerName"], nameParts[0]);
+  set(["surname", "lastName", "customerSurname"], nameParts.slice(1).join(" "));
+  set(["phone", "customerPhone"], fichaText(input.ficha, ["telefono", "celular", "phone"]));
+  set(["state", "department", "destinationDepartment"], fichaText(input.ficha, ["departamento", "state"]));
+  set(["city", "destinationCity"], fichaText(input.ficha, ["ciudad", "city"]));
+  set(["dir", "address", "deliveryAddress"], fichaText(input.ficha, ["direccion", "dirección", "address"]));
+  set(["clientEmail", "email", "customerEmail"], fichaText(input.ficha, ["correo", "email"]));
+  set(["rateType"], input.rateType);
+
+  const productsKey = propertyKey(["products"]);
+  if (!productsKey) return null;
+  const itemSchema = readProperty(productsKey)?.items;
+  const itemProperties = itemSchema?.properties;
+  if (!itemProperties) return null;
+  const itemKey = (candidates: string[]) => propertyKey(candidates, itemProperties);
+  const idKey = itemKey(["id", "productId"]);
+  const priceKey = itemKey(["price", "unitPrice"]);
+  const quantityKey = itemKey(["quantity", "qty"]);
+  if (!idKey || !priceKey || !quantityKey) return null;
+  const productLine: Record<string, unknown> = {
+    [idKey]: Number(productId),
+    [priceKey]: price,
+    [quantityKey]: quantity,
+  };
+  if ((itemSchema.required ?? []).some((key) => productLine[key] === undefined)) return null;
+  values[productsKey] = [productLine];
+
+  const missing = (schemaDef.required ?? []).filter((key) => values[key] === undefined || values[key] === null || values[key] === "");
+  return missing.length ? null : values;
+}
+
+export function isAffirmativeOrderSummaryConfirmation(affirmation: string, history: { direction: string; text: string | null }[]): boolean {
+  const answer = normalizedFichaKey(affirmation);
+  const affirmativeAnswers = new Set([
+    "si", "siestacorrecto", "sitodoestacorrecto", "sitodoescorrecto",
+    "correcto", "todocorrecto", "confirmo", "confirmado", "asi",
+  ]);
+  if (!affirmativeAnswers.has(answer)) return false;
+  const priorSummary = [...history].reverse().find((message) => message.direction === "out" && message.text);
+  if (!priorSummary?.text) return false;
+  const summary = normalizedFichaKey(priorSummary.text);
+  return summary.includes("resumen") &&
+    (summary.includes("solicitud") || summary.includes("pedido")) &&
+    (summary.includes("confirmacion") || summary.includes("correcto"));
+}
+
+
 export async function createPendingOrder(input: {
   organizationId: string;
   conversationId: string;
