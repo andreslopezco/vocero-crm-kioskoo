@@ -219,9 +219,6 @@ export function OrdersClient() {
         return;
       }
 
-      const activeOrder = sourceOrders.find((order) =>
-        (order.providerOrderId ?? order.shopOrderId ?? order.orderId) === actionOrderId
-      );
       const top = rect.bottom + 4;
 
       setMenuPosition({ top, right: Math.max(8, window.innerWidth - rect.right) });
