@@ -410,7 +410,7 @@ export function ContactPanel({
                   <p className="text-[11px] text-text-3">{dropiOrders.length} {dropiOrders.length === 1 ? "pedido vinculado" : "pedidos vinculados"}</p>
                 </div>
               </div>
-              <span className={cn("rounded-full px-2 py-1 text-[10px] font-medium", dropiConnected ? "bg-success-tint text-success-text" : "bg-warning-tint text-warning-text")}>
+              <span className={cn("rounded-full px-2 py-1 text-[10px] font-medium", dropiConnected ? "bg-brand-soft text-brand-text" : "bg-warning-tint text-warning-text")}>
                 {dropiConnected ? "Conectado" : "Sin conexión"}
               </span>
             </div>
@@ -462,7 +462,9 @@ export function ContactPanel({
               </ul>
             )}
           </section>
-        )}        {/* Stepper de etapa */}
+        )}
+
+        {/* Stepper de etapa */}
         {stages.length > 0 && leadId && (
           <section className="border-b p-4">
             <p className="kicker mb-3">Etapa del pipeline</p>
