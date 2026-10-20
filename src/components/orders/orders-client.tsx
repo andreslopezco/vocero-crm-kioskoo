@@ -5,7 +5,6 @@ import {
   AlertCircle,
   CalendarDays,
   CircleCheck,
-  Link2,
   PackageCheck,
   RefreshCw,
   Search,
@@ -34,7 +33,7 @@ type Order = {
 };
 
 type OrdersResponse = { connected: boolean; orders: Order[] };
-type Filter = "all" | "review" | "linked";
+type Filter = "all" | "review";
 
 function statusText(value: string | null) {
   const status = (value ?? "").trim().toLowerCase().replace(/[ -]+/g, "_");
@@ -112,7 +111,6 @@ export function OrdersClient() {
     return (data?.orders ?? []).filter((order) => {
       if (normalized && !searchText(order).includes(normalized)) return false;
       if (filter === "review" && !/review|unknown|submitt|pending/i.test(order.status ?? "")) return false;
-      if (filter === "linked" && order.source !== "linked") return false;
       return true;
     });
   }, [data, filter, query]);
@@ -133,7 +131,7 @@ export function OrdersClient() {
               <p className="kicker">Trabajo</p>
               <h1 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">Pedidos</h1>
               <p className="mt-1 max-w-2xl text-sm text-text-2">
-                Pedidos preparados por Vocero y pedidos de Dropi vinculados a tus contactos.
+                Consulta en un solo lugar los pedidos registrados para tus contactos.
               </p>
             </div>
           </div>
@@ -178,7 +176,6 @@ export function OrdersClient() {
               {([
                 ["all", "Todos"],
                 ["review", "Pendientes de revisión"],
-                ["linked", "Vinculados"],
               ] as const).map(([value, label]) => (
                 <Button key={value} type="button" size="sm" variant={filter === value ? "secondary" : "ghost"} onClick={() => setFilter(value)} aria-pressed={filter === value}>
                   {label}
@@ -199,12 +196,11 @@ export function OrdersClient() {
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="break-all text-sm font-bold">Pedido {order.orderId}</h3>
+                          <h3 className="break-all text-sm font-bold">{order.providerOrderId ? `Pedido ${order.providerOrderId}` : "Pedido pendiente de revisión"}</h3>
                           <Badge variant={statusVariant(order.status)}>{statusText(order.status)}</Badge>
                         </div>
                         {order.trackingCode && <p className="mt-1 flex items-center gap-1.5 text-xs text-text-2"><Truck className="h-3.5 w-3.5" />Guía {order.trackingCode}</p>}
                       </div>
-                      <Badge variant="outline">{order.source === "linked" ? <><Link2 className="mr-1 h-3 w-3" />Vinculado</> : "Creado desde Vocero"}</Badge>
                     </div>
 
                     <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
