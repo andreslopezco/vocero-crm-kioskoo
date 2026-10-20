@@ -82,7 +82,7 @@ function parseScalar(value: string): unknown {
   const unquoted = (trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))
     ? trimmed.slice(1, -1)
     : trimmed;
-  if (/^-?\\d+(?:\\.\\d+)?$/.test(unquoted)) return Number(unquoted);
+  if (/^-?\d+(?:\.\d+)?$/.test(unquoted)) return Number(unquoted);
   if (unquoted === "true") return true;
   if (unquoted === "false") return false;
   if (unquoted === "null") return null;
@@ -116,26 +116,29 @@ function splitDelimitedRow(line: string): string[] {
 function parseDropiText(text: string): unknown | undefined {
   const root: Record<string, unknown> = {};
   let activeObject: Record<string, unknown> | null = null;
+  let activeArray: unknown[] | null = null;
   let itemHeaders: string[] | null = null;
 
-  for (const line of text.split(/\\r?\\n/)) {
+  for (const line of text.split(/\r?\n/)) {
     if (!line.trim()) continue;
-    const tableHeader = line.match(/^\\s*([\\w-]+)\\[\\d+\\]\\{([^}]+)\\}:\\s*$/);
+    const tableHeader = line.match(/^\s*([\w-]+)\[\d+\]\{([^}]+)\}:\s*$/);
     if (tableHeader) {
       const key = tableHeader[1];
       itemHeaders = tableHeader[2].split(",").map((part) => part.trim());
-      root[key] = [];
+      activeArray = [];
+      root[key] = activeArray;
       activeObject = null;
       continue;
     }
 
-    const field = line.match(/^(\\s*)([\\w-]+):(?:\\s*(.*))?$/);
+    const field = line.match(/^(\s*)([\w-]+):(?:\s*(.*))?$/);
     if (field) {
       const indent = field[1].length;
       const key = field[2];
       const value = field[3] ?? "";
       if (indent === 0) {
         itemHeaders = null;
+        activeArray = null;
         if (value.trim()) {
           root[key] = parseScalar(value);
           activeObject = null;
@@ -150,16 +153,14 @@ function parseDropiText(text: string): unknown | undefined {
       continue;
     }
 
-    if (itemHeaders && /^\\s+/.test(line)) {
+    if (itemHeaders && activeArray && /^\s+/.test(line)) {
       const values = splitDelimitedRow(line.trim());
       if (values.length > itemHeaders.length && itemHeaders.length >= 3) {
         const trailingColumns = itemHeaders.length - 2;
         values.splice(1, values.length - trailingColumns - 1, values.slice(1, values.length - trailingColumns).join(","));
       }
       const item = Object.fromEntries(itemHeaders.map((key, index) => [key, parseScalar(values[index] ?? "")]));
-      const key = Object.keys(root).find((candidate) => Array.isArray(root[candidate]) && candidate.toLowerCase().includes("item"));
-      const target = key ? root[key] as unknown[] : null;
-      if (target) target.push(item);
+      activeArray.push(item);
     }
   }
 
@@ -177,8 +178,8 @@ function decodeOrder(result: {
   if (result.isError) throw new DropiLinkError("Dropi no pudo encontrar o consultar ese pedido.", "provider_error");
 
   const parseJson = (candidate: string): unknown | undefined => {
-    const trimmed = candidate.trim().replace(/^\`\`\`(?:json)?\\s*/i, "").replace(/\\s*\`\`\`$/, "");
-    const candidates = [trimmed, trimmed.match(/[\\[{][\\s\\S]*[\\]}]/)?.[0]];
+    const trimmed = candidate.trim();
+    const candidates = [trimmed, trimmed.match(/[\[{][\s\S]*[\]}]/)?.[0]];
     for (const value of candidates) {
       if (!value) continue;
       try {
@@ -197,6 +198,8 @@ function decodeOrder(result: {
     if (typeof result.structuredContent !== "string") return result.structuredContent;
     const parsed = parseJson(result.structuredContent);
     if (parsed !== undefined) return parsed;
+    const structured = parseDropiText(result.structuredContent);
+    if (structured !== undefined) return structured;
   }
 
   const text = (result.content ?? [])
@@ -209,7 +212,7 @@ function decodeOrder(result: {
     const structured = parseDropiText(part);
     if (structured !== undefined) return structured;
   }
-  const combined = text.join("\\n");
+  const combined = text.join("\n");
   const parsedCombined = parseJson(combined);
   if (parsedCombined !== undefined) return parsedCombined;
   const structuredCombined = parseDropiText(combined);
