@@ -19,6 +19,11 @@ describe("teléfono principal capturado en la ficha", () => {
     expect(phoneFromFicha({ Telefono: "3102307059" })).toBe("3102307059");
   });
 
+  it("respeta un país explícito distinto aunque la ciudad coincida", () => {
+    expect(phoneFromFicha({ phone: "3102307059", País: "México", Ciudad: "Bogotá" }))
+      .toBe("3102307059");
+  });
+
   it("ignora valores que no parecen teléfonos", () => {
     expect(phoneFromFicha({ Teléfono: "llamar al cliente" })).toBeNull();
     expect(phoneFromFicha({ Telefono: "123" })).toBeNull();
