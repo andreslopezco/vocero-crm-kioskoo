@@ -385,6 +385,126 @@ function organizationOrderItems(value: unknown) {
     });
 }
 
+function productSignature(items: Array<{ productId?: string | null; quantity: string | null }>): string | null {
+  const lines = items.flatMap((item) => {
+    const productId = item.productId?.trim();
+    if (!productId || !/^[1-9]\\d{0,23}$/.test(productId)) return [];
+    return [`${productId}:${item.quantity?.trim() || "1"}`];
+  }).sort();
+  return lines.length ? lines.join("|") : null;
+}
+
+/**
+ * Actualiza desde Dropi los pedidos ya vinculados y reconcilia una solicitud
+ * local de Vocero solo si coincide exactamente el contacto, productos y
+ * cantidades con un único pedido importado recientemente.
+ */
+export async function refreshDropiOrders(organizationId: string) {
+  const connection = await getDropiConnection(organizationId);
+  if (!connection || connection.status !== "connected") {
+    throw new DropiLinkError("Conecta Dropi para traer la información más reciente.", "not_connected");
+  }
+
+  const db = getDb();
+  const [links, submissions, tools] = await Promise.all([
+    db.select({
+      id: schema.dropiOrderLink.id,
+      providerOrderId: schema.dropiOrderLink.providerOrderId,
+      contactId: schema.dropiOrderLink.contactId,
+      snapshot: schema.dropiOrderLink.snapshot,
+      createdAt: schema.dropiOrderLink.createdAt,
+    }).from(schema.dropiOrderLink)
+      .where(scoped(schema.dropiOrderLink.organizationId, organizationId))
+      .orderBy(desc(schema.dropiOrderLink.updatedAt))
+      .limit(30),
+    db.select({
+      id: schema.dropiOrderSubmission.id,
+      providerOrderId: schema.dropiOrderSubmission.providerOrderId,
+      status: schema.dropiOrderSubmission.status,
+      payload: schema.dropiOrderSubmission.payload,
+      contactId: schema.dropiOrderSubmission.contactId,
+      createdAt: schema.dropiOrderSubmission.createdAt,
+    }).from(schema.dropiOrderSubmission)
+      .where(scoped(schema.dropiOrderSubmission.organizationId, organizationId))
+      .orderBy(desc(schema.dropiOrderSubmission.createdAt)),
+    listDropiTools(organizationId),
+  ]);
+
+  const tool = tools.find((entry) => entry.name === "get_order");
+  const inputSchema = tool?.inputSchema as { properties?: Record<string, unknown>; required?: string[] } | undefined;
+  const idKey = Object.keys(inputSchema?.properties ?? []).find((key) =>
+    ["id", "orderid", "order_id", "ordercode", "order_code"].includes(normalizedKey(key))
+  );
+  if (!tool || !idKey) throw new DropiLinkError("Dropi no ofrece una herramienta compatible para consultar pedidos.", "tool_unavailable");
+  const missing = (inputSchema?.required ?? []).filter((key) => key !== idKey);
+  if (missing.length) throw new DropiLinkError("Dropi exige datos adicionales para consultar un pedido.", "missing_fields");
+
+  const refreshed: Array<{
+    id: string;
+    providerOrderId: string;
+    contactId: string;
+    createdAt: Date;
+    summary: DropiLinkedOrder;
+  }> = [];
+  for (const row of links) {
+    try {
+      const result = await callDropiTool(organizationId, "get_order", { [idKey]: row.providerOrderId });
+      const data = decodeOrder(result);
+      const summary = summaryFromOrder(row.providerOrderId, data, "linked");
+      const now = new Date();
+      await db.update(schema.dropiOrderLink).set({ snapshot: summary, updatedAt: now }).where(scoped(
+        schema.dropiOrderLink.organizationId,
+        organizationId,
+        eq(schema.dropiOrderLink.id, row.id)
+      ));
+      refreshed.push({ id: row.id, providerOrderId: row.providerOrderId, contactId: row.contactId, createdAt: row.createdAt, summary });
+    } catch (error) {
+      console.warn("[orders] Dropi refresh failed for linked order", row.providerOrderId, error instanceof Error ? error.message : "unknown");
+    }
+  }
+
+  const orphanSubmissions = submissions.filter((row) => !row.providerOrderId);
+  const matchesBySubmission = new Map<string, typeof refreshed>();
+  const matchesByProviderOrder = new Map<string, string[]>();
+  const freshnessWindow = 7 * 24 * 60 * 60 * 1000;
+
+  for (const submission of orphanSubmissions) {
+    const signature = productSignature(organizationOrderItems(submission.payload));
+    if (!signature) continue;
+    const submissionTime = submission.createdAt.getTime();
+    const candidates = refreshed.filter((order) =>
+      order.contactId === submission.contactId &&
+      Math.abs(order.createdAt.getTime() - submissionTime) <= freshnessWindow &&
+      productSignature(order.summary.items) === signature
+    );
+    if (candidates.length !== 1) continue;
+    matchesBySubmission.set(submission.id, candidates);
+    const providerOrderId = candidates[0]!.providerOrderId;
+    matchesByProviderOrder.set(providerOrderId, [...(matchesByProviderOrder.get(providerOrderId) ?? []), submission.id]);
+  }
+
+  let reconciledOrders = 0;
+  for (const submission of orphanSubmissions) {
+    const candidates = matchesBySubmission.get(submission.id);
+    if (!candidates?.length) continue;
+    const candidate = candidates[0]!;
+    if (matchesByProviderOrder.get(candidate.providerOrderId)?.length !== 1) continue;
+    await db.update(schema.dropiOrderSubmission).set({
+      providerOrderId: candidate.providerOrderId,
+      providerStatus: candidate.summary.status,
+      status: "submitted",
+      updatedAt: new Date(),
+    }).where(scoped(
+      schema.dropiOrderSubmission.organizationId,
+      organizationId,
+      eq(schema.dropiOrderSubmission.id, submission.id)
+    ));
+    reconciledOrders += 1;
+  }
+
+  return { refreshedOrders: refreshed.length, reconciledOrders };
+}
+
 /** Lista pedidos creados desde Vocero y pedidos de Dropi vinculados, dentro de la organización. */
 export async function listDropiOrders(organizationId: string) {
   const db = getDb();
