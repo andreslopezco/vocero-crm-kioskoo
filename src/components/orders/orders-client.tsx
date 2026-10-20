@@ -83,9 +83,79 @@ function isPendingConfirmation(value: string | null) {
   return status.includes("pending confirmation") || status.includes("pendiente confirmacion");
 }
 
+const IN_TRANSIT_STATUSES = new Set([
+  // Dropi: estados de movimiento por su red y entrega a transportadora.
+  "entregado a transportadora",
+  "en bodega dropi",
+  "recogido por dropi",
+  "recibido pau",
+  "recibido por dropi",
+
+  // Servientrega.
+  "ingreso al centro logistico",
+  "en zona de distribucion",
+  "salio a ciudad destino",
+
+  // Envia.
+  "despachada",
+  "despachada de transito",
+  "en transito",
+  "en bodega destino",
+  "en reparto",
+  "en reexpedicion",
+  "mercancia recogida",
+
+  // Coordinadora.
+  "en terminal origen",
+  "en transporte",
+  "en terminal destino",
+
+  // Interrapidisimo.
+  "envio admitido",
+  "admitida",
+  "ingresado a bodega",
+  "centro acopio",
+  "viajando en ruta nacional",
+  "viajando en ruta regional",
+  "transito nacional",
+  "transito regional",
+  "transito urbano",
+  "despachado para bodega",
+  "en distribucion urbana",
+  "en distribucion urbana agencia",
+  "distribucion",
+  "reparto",
+  "reenvi[o]",
+  "intento de entrega",
+  "para nuevo intento entrega",
+
+  // Domina.
+  "asignado a zona",
+  "transporte nacional",
+  "recepcion bodega",
+  "asignado a courier",
+  "asignado a sucursal destino",
+
+  // Veloces.
+  "en ruta",
+  "en camino",
+
+  // SUPPLI-EXPRESS-ESM.
+  "en transito a ciudad destino",
+  "en distribucion",
+  "llego a oficina de destino",
+
+  // TCC.
+  "en aerolinea de miami",
+  "en aerolinea de colombia",
+  "en despacho",
+  "en traslado nacional",
+  "en recibo",
+  "entregada a conexiones",
+]);
+
 function isInTransit(value: string | null) {
-  // Por ahora solo contamos el estado de Dropi que ya identificamos; se amplía al confirmar otros estados.
-  return normalizedStatus(value).includes("bodega destino");
+  return IN_TRANSIT_STATUSES.has(normalizedStatus(value));
 }
 
 function isDelivered(value: string | null) {
