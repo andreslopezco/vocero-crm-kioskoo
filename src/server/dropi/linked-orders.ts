@@ -226,18 +226,18 @@ function decodeOrder(result: {
   if (structuredCombined !== undefined) return structuredCombined;
   throw new DropiLinkError("Dropi devolvió una respuesta de pedido que no se pudo interpretar.", "invalid_response");
 }
-function findNamedArray(value: unknown, name: string): unknown[] {
+function findNamedArray(value: unknown, name: string): unknown[] | undefined {
   const wanted = normalizedKey(name);
-  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
   for (const [key, candidate] of Object.entries(record)) {
     if (normalizedKey(key) === wanted && Array.isArray(candidate)) return candidate;
   }
   for (const candidate of Object.values(record)) {
     const found = findNamedArray(candidate, name);
-    if (found.length) return found;
+    if (found !== undefined) return found;
   }
-  return [];
+  return undefined;
 }
 
 function decodeOrderPage(result: {
@@ -263,7 +263,7 @@ function decodeOrderPage(result: {
     if (Array.isArray(parsed)) return parsed;
     for (const key of arrayKeys) {
       const rows = findNamedArray(parsed, key);
-      if (rows.length) return rows;
+      if (rows !== undefined) return rows;
     }
   }
   throw new DropiLinkError("Dropi devolvió una lista de pedidos que no se pudo interpretar.", "invalid_response");
