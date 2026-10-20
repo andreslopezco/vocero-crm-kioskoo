@@ -240,8 +240,8 @@ export function OrdersClient() {
                   <colgroup>
                     <col className="w-[13%]" />
                     <col className="w-[17%]" />
-                    <col className="w-[28%]" />
-                    <col className="w-[20%]" />
+                    <col className="w-[19%]" />
+                    <col className="w-[29%]" />
                     <col className="w-[11%]" />
                     <col className="w-[11%]" />
                   </colgroup>
