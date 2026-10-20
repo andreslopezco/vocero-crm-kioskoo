@@ -125,7 +125,7 @@ const IN_TRANSIT_STATUSES = new Set([
   "en distribucion urbana agencia",
   "distribucion",
   "reparto",
-  "reenvi[o]",
+  "reenvio",
   "intento de entrega",
   "para nuevo intento entrega",
 
