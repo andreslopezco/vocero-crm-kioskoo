@@ -15,6 +15,8 @@ export type DropiLinkedOrder = {
   orderId: string;
   status: string | null;
   trackingCode: string | null;
+  createdAt: string | null;
+  carrier: string | null;
   total: string | null;
   currency: string | null;
   items: { name: string; quantity: string | null; productId?: string | null }[];
@@ -224,6 +226,27 @@ function decodeOrder(result: {
   if (structuredCombined !== undefined) return structuredCombined;
   throw new DropiLinkError("Dropi devolvió una respuesta de pedido que no se pudo interpretar.", "invalid_response");
 }
+function carrierFromOrder(data: unknown): string | null {
+  const carrier = findValue(data, [
+    "shipping_company", "shipping_carrier", "carrier_name", "carrier",
+    "distribution_company_name", "logistics_company", "logistic_company",
+    "courier", "transportadora",
+  ]);
+  return textValue(carrier)
+    ?? textValue(findValue(carrier, ["name", "company_name", "display_name", "title"]));
+}
+
+function dateValue(data: unknown, keys: string[]): string | null {
+  const value = findValue(data, keys);
+  const text = textValue(value);
+  if (!text) return null;
+  const numeric = Number(text);
+  const date = new Date(Number.isFinite(numeric) && /^\d{10,13}$/.test(text)
+    ? (text.length === 10 ? numeric * 1000 : numeric)
+    : text);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
 function summaryFromOrder(orderId: string, data: unknown, source: DropiLinkedOrder["source"]): DropiLinkedOrder {
   const rawItems = findArray(data, ["products", "items", "order_items", "details"]);
   const items = rawItems.slice(0, 20).flatMap((entry) => {
@@ -233,15 +256,17 @@ function summaryFromOrder(orderId: string, data: unknown, source: DropiLinkedOrd
     const quantity = textValue(findValue(entry, ["quantity", "qty"]));
     return name || productId ? [{ name: name ?? "Producto", quantity, productId }] : [];
   });
-  const updated = findValue(data, ["updated_at", "updatedAt", "created_at", "createdAt"]);
+  const createdAt = dateValue(data, ["created_at", "createdAt", "creation_date", "creationDate", "order_date", "orderDate", "date_created"]);
   return {
     orderId,
     status: textValue(findValue(data, ["status", "order_status", "orderStatus"])),
     trackingCode: textValue(findValue(data, ["tracking_code", "trackingCode", "tracking_number", "guide"])),
+    createdAt,
+    carrier: carrierFromOrder(data),
     total: textValue(findValue(data, ["total", "total_amount", "grand_total", "order_total"])),
     currency: textValue(findValue(data, ["currency", "currency_code"])),
     items,
-    updatedAt: textValue(updated) ?? new Date().toISOString(),
+    updatedAt: dateValue(data, ["updated_at", "updatedAt"]) ?? createdAt ?? new Date().toISOString(),
     source,
   };
 }
@@ -272,6 +297,8 @@ export async function listDropiOrdersForContact(organizationId: string, contactI
   const orders: DropiLinkedOrder[] = linked.map((row) => ({
     ...row.snapshot as unknown as Omit<DropiLinkedOrder, "updatedAt" | "source">,
     orderId: row.providerOrderId,
+    createdAt: textValue(findValue(row.snapshot, ["created_at", "createdAt"])) ?? null,
+    carrier: carrierFromOrder(row.snapshot),
     updatedAt: row.updatedAt.toISOString(),
     source: "linked",
   }));
@@ -285,7 +312,7 @@ export async function listDropiOrdersForContact(organizationId: string, contactI
     orders.push({
       orderId: row.providerOrderId,
       status: row.providerStatus ?? row.status,
-      trackingCode: null, total: null, currency: null,
+      trackingCode: null, createdAt: row.createdAt.toISOString(), carrier: null, total: null, currency: null,
       items: productLines.flatMap((item) => {
         if (!item || typeof item !== "object" || Array.isArray(item)) return [];
         const entry = item as Record<string, unknown>;
@@ -527,6 +554,7 @@ export async function listDropiOrders(organizationId: string) {
       providerStatus: schema.dropiOrderSubmission.providerStatus,
       status: schema.dropiOrderSubmission.status,
       payload: schema.dropiOrderSubmission.payload,
+      createdAt: schema.dropiOrderSubmission.createdAt,
       updatedAt: schema.dropiOrderSubmission.updatedAt,
       contactId: schema.contact.id,
       contactName: schema.contact.name,
@@ -554,6 +582,8 @@ export async function listDropiOrders(organizationId: string) {
       contactPhone: row.contactPhone,
       status: textValue(findValue(snapshot, ["status", "order_status", "orderStatus"])),
       trackingCode: textValue(findValue(snapshot, ["tracking_code", "trackingCode", "tracking_number", "guide"])),
+      createdAt: textValue(findValue(snapshot, ["created_at", "createdAt"])) ?? null,
+      carrier: carrierFromOrder(snapshot),
       total: textValue(findValue(snapshot, ["total", "total_amount", "grand_total", "order_total"])),
       currency: textValue(findValue(snapshot, ["currency", "currency_code"])),
       items: organizationOrderItems(snapshot),
@@ -576,6 +606,8 @@ export async function listDropiOrders(organizationId: string) {
       contactPhone: row.contactPhone,
       status: row.providerStatus ?? row.status,
       trackingCode: textValue(findValue(row.payload, ["tracking_code", "trackingCode", "tracking_number", "guide"])),
+      createdAt: row.createdAt.toISOString(),
+      carrier: carrierFromOrder(row.payload),
       total: payloadTotal,
       currency: textValue(findValue(row.payload, ["currency", "currency_code"])),
       items,
