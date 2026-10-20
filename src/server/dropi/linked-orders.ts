@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
@@ -579,7 +579,7 @@ export async function refreshDropiOrders(organizationId: string) {
     }))).onConflictDoUpdate({
       target: [schema.dropiOrderSync.organizationId, schema.dropiOrderSync.orderId],
       set: {
-        contactId: sql`excluded.contact_id`,
+        contactId: sql`coalesce(${schema.dropiOrderSync.contactId}, excluded.contact_id)`,
         snapshot: sql`excluded.snapshot`,
         updatedAt: sql`excluded.updated_at`,
       },
@@ -635,6 +635,46 @@ export async function refreshDropiOrders(organizationId: string) {
   }
 
   return { refreshedOrders: imported.length, reconciledOrders, failedOrders: 0 };
+}
+
+/** Asigna un pedido importado de Dropi a un contacto existente, sin cambiar el pedido remoto. */
+export async function assignDropiOrderToContact(organizationId: string, orderIdInput: string, contactIdInput: string) {
+  const orderId = orderIdInput.trim();
+  const contactId = contactIdInput.trim();
+  if (!orderId || orderId.length > 100) throw new DropiLinkError("ID de pedido no válido.", "invalid_order_id");
+  if (!contactId || contactId.length > 100) throw new DropiLinkError("Selecciona un contacto válido.", "invalid_contact_id");
+
+  const db = getDb();
+  const [order] = await db.select({ contactId: schema.dropiOrderSync.contactId })
+    .from(schema.dropiOrderSync)
+    .where(scoped(
+      schema.dropiOrderSync.organizationId,
+      organizationId,
+      and(eq(schema.dropiOrderSync.orderId, orderId), eq(schema.dropiOrderSync.ignored, false))
+    ))
+    .limit(1);
+  if (!order) throw new DropiLinkError("No se encontró ese pedido importado de Dropi.", "order_not_found");
+  if (order.contactId) throw new DropiLinkError("Ese pedido ya está asignado a un contacto.", "already_assigned");
+
+  const [contact] = await db.select({ id: schema.contact.id })
+    .from(schema.contact)
+    .where(scoped(schema.contact.organizationId, organizationId, eq(schema.contact.id, contactId)))
+    .limit(1);
+  if (!contact) throw new DropiLinkError("El contacto seleccionado no existe en esta organización.", "contact_not_found");
+
+  const [updated] = await db.update(schema.dropiOrderSync)
+    .set({ contactId, updatedAt: new Date() })
+    .where(scoped(
+      schema.dropiOrderSync.organizationId,
+      organizationId,
+      and(
+        eq(schema.dropiOrderSync.orderId, orderId),
+        eq(schema.dropiOrderSync.ignored, false),
+        isNull(schema.dropiOrderSync.contactId)
+      )
+    ))
+    .returning({ id: schema.dropiOrderSync.id });
+  if (!updated) throw new DropiLinkError("El pedido acaba de ser asignado. Actualiza la lista e inténtalo de nuevo.", "already_assigned");
 }
 
 /** Oculta un pedido de la tabla de Vocero; nunca cancela ni elimina el pedido en Dropi. */
