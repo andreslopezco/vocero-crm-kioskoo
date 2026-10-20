@@ -227,7 +227,7 @@ export function OrdersClient() {
         : activeOrder?.source === "dropi" && !activeOrder.contactId
           ? assignmentOrderId === actionOrderId ? 360 : 280
           : 56;
-      const top = Math.max(8, rect.top - estimatedHeight - 4);
+      const top = rect.bottom + 4;
 
       setMenuPosition({ top, right: Math.max(8, window.innerWidth - rect.right) });
     };
