@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
+  MoreHorizontal,
   PackageCheck,
   RefreshCw,
   Search,
+  Trash2,
   Truck,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +19,7 @@ type Order = {
   orderId: string;
   providerOrderId: string | null;
   shopOrderId: string | null;
-  contactId: string;
+  contactId: string | null;
   contactName: string;
   contactPhone: string | null;
   status: string | null;
@@ -28,7 +30,7 @@ type Order = {
   currency: string | null;
   items: { name: string; quantity: string | null }[];
   updatedAt: string;
-  source: "linked" | "vocero";
+  source: "linked" | "vocero" | "dropi";
 };
 
 type OrdersResponse = { connected: boolean; orders: Order[] };
@@ -117,6 +119,8 @@ export function OrdersClient() {
   const [notice, setNotice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [actionOrderId, setActionOrderId] = useState<string | null>(null);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
 
   const load = useCallback(async (quiet = false) => {
     if (quiet) setRefreshing(true);
@@ -169,6 +173,28 @@ export function OrdersClient() {
   const needsReview = (data?.orders ?? []).filter((order) =>
     /review|unknown|submitt|pending/i.test(order.status ?? "")
   ).length;
+
+  async function removeOrder(order: Order) {
+    const orderId = order.providerOrderId ?? order.shopOrderId ?? order.orderId;
+    if (!window.confirm(`¿Eliminar del CRM el pedido ${orderId}? Solo se ocultará en Vocero; no se cancelará ni eliminará en Dropi.`)) return;
+    setDeletingOrderId(orderId);
+    setError(null);
+    try {
+      const response = await fetch("/api/orders", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+      const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+      if (!response.ok) throw new Error(body?.error?.message ?? "No se pudo eliminar el pedido de Vocero.");
+      setActionOrderId(null);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudo eliminar el pedido de Vocero.");
+    } finally {
+      setDeletingOrderId(null);
+    }
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -238,27 +264,29 @@ export function OrdersClient() {
               <div className="overflow-x-auto rounded-lg border bg-card">
                 <table aria-label="Pedidos registrados" className="w-full min-w-[1180px] table-fixed text-sm">
                   <colgroup>
-                    <col className="w-[12%]" />
-                    <col className="w-[15%]" />
+                    <col className="w-[9%]" />
                     <col className="w-[14%]" />
-                    <col className="w-[27%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[26%]" />
                     <col className="w-[11%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[11%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[13%]" />
+                    <col className="w-[4%]" />
                   </colgroup>
                   <thead className="kicker border-b bg-subtle text-left">
                     <tr>
-                      <th scope="col" className="px-3 py-2.5 font-medium sm:px-4">ID de pedido</th>
+                      <th scope="col" className="px-3 py-2.5 font-medium sm:px-4">ID pedido</th>
                       <th scope="col" className="px-3 py-2.5 font-medium">Fecha</th>
                       <th scope="col" className="px-3 py-2.5 font-medium">Contacto</th>
                       <th scope="col" className="px-3 py-2.5 font-medium">Productos</th>
                       <th scope="col" className="px-3 py-2.5 font-medium">Envío</th>
                       <th scope="col" className="px-3 py-2.5 font-medium">Total</th>
                       <th scope="col" className="px-3 py-2.5 font-medium">Estado</th>
+                      <th scope="col" className="px-2 py-2.5 font-medium"><span className="sr-only">Acciones</span></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {orders.map((order) => (
+                    {orders.map((order, index) => (
                       <tr key={order.providerOrderId ?? order.shopOrderId ?? order.orderId} className="border-t align-middle first:border-t-0">
                         <td className="min-w-0 px-3 py-3 sm:px-4">
                           <p className="break-all font-semibold leading-5">
@@ -307,6 +335,39 @@ export function OrdersClient() {
                           >
                             {statusText(order.status)}
                           </Badge>
+                        </td>
+                        <td className="px-2 py-3 text-right">
+                          <div className="relative flex justify-end">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7"
+                              aria-label={`Acciones para pedido ${order.providerOrderId ?? order.shopOrderId ?? order.orderId}`}
+                              aria-haspopup="menu"
+                              aria-expanded={actionOrderId === (order.providerOrderId ?? order.shopOrderId ?? order.orderId)}
+                              onClick={() => setActionOrderId((current) => current === (order.providerOrderId ?? order.shopOrderId ?? order.orderId) ? null : (order.providerOrderId ?? order.shopOrderId ?? order.orderId))}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                            {actionOrderId === (order.providerOrderId ?? order.shopOrderId ?? order.orderId) && (
+                              <div
+                                role="menu"
+                                className={`absolute right-0 z-30 min-w-44 rounded-md border bg-card p-1 shadow-lg ${index === 0 ? "top-full mt-1" : "bottom-full mb-1"}`}
+                              >
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  disabled={deletingOrderId !== null}
+                                  onClick={() => void removeOrder(order)}
+                                  className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-danger-text hover:bg-danger-tint disabled:opacity-50"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Eliminar del CRM
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
