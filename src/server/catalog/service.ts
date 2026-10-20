@@ -166,7 +166,7 @@ export async function saveCatalogProduct(
   if (pending) await pending.catch(() => undefined);
   await storeLocalDropiProductId(organizationId, snapshot.catalogId, product.retailerId, product.dropiProductId ?? "");
   try {
-    const refreshed = await syncCatalog(organizationId, { force: true });
+    await syncCatalog(organizationId, { force: true });
     return { synced: true };
   } catch {
     // El cambio ya fue aceptado por Meta; no informamos un falso fallo que
