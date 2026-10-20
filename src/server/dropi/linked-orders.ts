@@ -549,7 +549,7 @@ export async function refreshDropiOrders(organizationId: string) {
     orderId: string;
     contactId: string | null;
     createdAt: Date | null;
-    summary: DropiLinkedOrder;
+    summary: DropiLinkedOrder & { customerName: string | null };
   }> = [];
   const now = new Date();
   const seen = new Set<string>();
