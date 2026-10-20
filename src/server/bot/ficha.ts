@@ -75,25 +75,64 @@ const PHONE_FIELD_KEYS = new Set([
   "whatsappphone",
   "whatsappnumber",
 ]);
+const COLOMBIAN_LOCATION_KEYS = new Set([
+  "country", "countryname", "pais", "departamento", "department", "state",
+  "ciudad", "city", "direccion", "address", "shippingaddress", "deliveryaddress",
+]);
+const COLOMBIAN_LOCATION_TERMS = [
+  "colombia", "bogota", "antioquia", "arauca", "atlantico", "amazonas",
+  "bolivar", "boyaca", "caldas", "caqueta", "casanare", "cauca", "cesar",
+  "choco", "cordoba", "cundinamarca", "guainia", "guaviare", "huila",
+  "laguajira", "magdalena", "meta", "narino", "nortedesantander", "putumayo",
+  "quindio", "risaralda", "sanandres", "santander", "sucre", "tolima",
+  "valledelcauca", "vaupes", "vichada", "medellin", "cali", "barranquilla",
+  "cartagena", "bucaramanga", "cucuta", "pereira", "manizales", "santamarta",
+  "ibague", "villavicencio", "pasto", "monteria", "valledupar", "neiva",
+  "armenia", "popayan", "sincelejo", "tunja", "floridablanca", "soacha",
+  "bello", "itagui", "envigado", "palmira", "buenaventura",
+];
+
+function normalizedFichaKey(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function fichaIndicatesColombia(raw: Record<string, unknown>): boolean {
+  const locations = Object.entries(raw)
+    .filter(([key]) => COLOMBIAN_LOCATION_KEYS.has(normalizedFichaKey(key)))
+    .map(([, value]) => typeof value === "string" ? normalizedFichaKey(value) : "")
+    .filter(Boolean);
+  const country = Object.entries(raw)
+    .filter(([key]) => ["country", "countryname", "pais"].includes(normalizedFichaKey(key)))
+    .map(([, value]) => typeof value === "string" ? normalizedFichaKey(value) : "");
+  if (country.some((value) => value === "co" || value === "col" || value.includes("colombia"))) return true;
+  const locationText = locations.join(" ");
+  return COLOMBIAN_LOCATION_TERMS.some((term) => locationText.includes(term));
+}
 
 /**
- * Obtiene un teléfono capturado en los campos flexibles de la ficha.
- * Acepta etiquetas comunes en español/inglés, pero solo valores telefónicos
- * (dígitos, espacios y separadores) de 7 a 15 dígitos.
+ * Obtiene el teléfono capturado y lo normaliza para el contacto principal.
+ * Para un celular colombiano local (10 dígitos, empieza por 3), agrega 57
+ * solo si país, ciudad, departamento o dirección indican Colombia.
  */
 export function phoneFromFicha(raw: unknown): string | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  for (const [rawKey, value] of Object.entries(raw)) {
-    const key = rawKey.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (!PHONE_FIELD_KEYS.has(key) || (typeof value !== "string" && typeof value !== "number")) continue;
+  const record = raw as Record<string, unknown>;
+  const entries = Object.entries(record)
+    .filter(([rawKey]) => PHONE_FIELD_KEYS.has(normalizedFichaKey(rawKey)))
+    .sort(([a], [b]) => Number(normalizedFichaKey(b) === "phone") - Number(normalizedFichaKey(a) === "phone"));
+  for (const [, value] of entries) {
+    if (typeof value !== "string" && typeof value !== "number") continue;
     const candidate = String(value).trim();
     if (!candidate || !/^\+?[\d\s().-]+$/.test(candidate)) continue;
     const digits = candidate.replace(/\D/g, "");
-    if (digits.length >= 7 && digits.length <= 15) return digits;
+    if (digits.length < 7 || digits.length > 15) continue;
+    if (digits.length === 10 && digits.startsWith("3") && fichaIndicatesColombia(record)) {
+      return "57" + digits;
+    }
+    return digits;
   }
   return null;
 }
-
 /** Merge campo a campo: lo ausente se conserva, `null` explícito borra. */
 export function mergeFicha(prev: Ficha | null | undefined, patch: Ficha): Ficha {
   const out: Ficha = { ...(prev ?? {}) };
