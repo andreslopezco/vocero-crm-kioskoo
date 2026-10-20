@@ -75,10 +75,6 @@ const PHONE_FIELD_KEYS = new Set([
   "whatsappphone",
   "whatsappnumber",
 ]);
-const COLOMBIAN_LOCATION_KEYS = new Set([
-  "country", "countryname", "pais", "departamento", "department", "state",
-  "ciudad", "city", "direccion", "address", "shippingaddress", "deliveryaddress",
-]);
 const COLOMBIAN_LOCATION_TERMS = [
   "colombia", "bogota", "antioquia", "arauca", "atlantico", "amazonas",
   "bolivar", "boyaca", "caldas", "caqueta", "casanare", "cauca", "cesar",
