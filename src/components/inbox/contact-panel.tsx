@@ -45,7 +45,7 @@ type DropiOrderPanelItem = {
   orderId: string; status: string | null; trackingCode: string | null;
   carrier: string | null; total: string | null; currency: string | null;
   items: { name: string; quantity: string | null }[];
-  updatedAt: string; source: "linked" | "vocero" | "dropi";
+  updatedAt: string; source: "linked" | "vocero"; canUnlink: boolean;
 };
 
 function dropiStatusText(value: string | null) {
@@ -586,7 +586,7 @@ export function ContactPanel({
                           {dropiStatusText(order.status)}
                         </Badge>
                       </div>
-                      {order.source === "linked" && (
+                      {order.canUnlink && (
                         <button type="button" aria-label={`Desvincular pedido ${order.orderId}`} onClick={() => void unlinkDropiOrder(order.orderId)} className="rounded p-1 text-text-3 hover:bg-accent hover:text-danger-text">
                           <Unlink className="h-3.5 w-3.5" strokeWidth={1.7} />
                         </button>
