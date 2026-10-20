@@ -72,7 +72,7 @@ export function DropiSettingsClient({ canConfigure }: { canConfigure: boolean })
   }
 
   if (!view) {
-    return <div className="mx-auto max-w-3xl space-y-4 p-1" aria-live="polite">
+    return <div className="w-full max-w-3xl space-y-4 p-1" aria-live="polite">
       <div className="h-5 w-28 animate-pulse rounded bg-subtle" />
       <div className="h-9 w-64 animate-pulse rounded bg-subtle" />
       <div className="h-48 animate-pulse rounded-lg border bg-card" />
@@ -80,7 +80,7 @@ export function DropiSettingsClient({ canConfigure }: { canConfigure: boolean })
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="w-full max-w-3xl space-y-6">
       {!view.config.ready && (
         <div className="flex items-start gap-3 rounded-md border border-warning-soft bg-warning-tint p-4 text-sm text-warning-text" role="status">
           <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
