@@ -64,7 +64,7 @@ function displayDate(value: string | null) {
   if (!value) return "No disponible";
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "No disponible";
-  return new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Bogota" }).format(date);
 }
 
 function displayMoney(value: string | null, currency: string | null) {
