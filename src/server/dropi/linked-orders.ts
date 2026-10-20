@@ -4,7 +4,7 @@ import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
 import { getDropiConnection } from "./credentials";
 import { phoneFromFicha } from "@/server/bot/ficha";
-import { callDropiTool, callDropiToolPages, listDropiTools } from "./mcp-client";
+import { callDropiTool, callDropiTools, callDropiToolPages, listDropiTools } from "./mcp-client";
 import { dropiProductIdFromAttributes } from "./product-mapping";
 
 export class DropiLinkError extends Error {
@@ -565,11 +565,43 @@ export async function refreshDropiOrders(organizationId: string) {
     if (phone) contactIdsByPhone.set(phone, [...(contactIdsByPhone.get(phone) ?? []), contact.id]);
   }
 
+  const detailTool = tools.find((entry) => entry.name === "get_order");
+  const detailSchema = detailTool?.inputSchema as { properties?: Record<string, unknown>; required?: string[] } | undefined;
+  const detailProperties = detailSchema?.properties ?? {};
+  const detailIdKey = Object.keys(detailProperties).find((key) =>
+    ["id", "orderid", "order_id", "ordercode", "order_code"].includes(normalizedKey(key))
+  );
+  const detailMissing = (detailSchema?.required ?? []).filter((key) => key !== detailIdKey);
+  const rowsNeedingDetails = providerRows.flatMap((row) => {
+    const orderId = providerOrderId(row);
+    return orderId && !summaryFromOrder(orderId, row, "linked").items.length ? [{ orderId, row }] : [];
+  });
+  const detailByOrderId = new Map<string, { data: unknown; summary: DropiLinkedOrder }>();
+  if (detailIdKey && detailMissing.length === 0 && rowsNeedingDetails.length) {
+    const results = await callDropiTools(
+      organizationId,
+      "get_order",
+      rowsNeedingDetails.map(({ orderId }) => ({ [detailIdKey]: orderId }))
+    );
+    for (let index = 0; index < rowsNeedingDetails.length; index += 1) {
+      const result = results[index];
+      if (!result || result.isError) continue;
+      try {
+        const { orderId } = rowsNeedingDetails[index]!;
+        const detail = decodeOrder(result);
+        const summary = summaryFromOrder(orderId, detail, "linked");
+        if (summary.items.length) detailByOrderId.set(orderId, { data: detail, summary });
+      } catch {
+        // Conserva el resumen importado si Dropi no entrega el detalle de un pedido.
+      }
+    }
+  }
+
   const imported: Array<{
     orderId: string;
     contactId: string | null;
     createdAt: Date | null;
-    summary: DropiLinkedOrder & { customerName: string | null };
+    summary: DropiLinkedOrder & { customerName: string | null; customerPhone: string | null };
   }> = [];
   const now = new Date();
   const seen = new Set<string>();
@@ -577,11 +609,34 @@ export async function refreshDropiOrders(organizationId: string) {
     const orderId = providerOrderId(row);
     if (!orderId || seen.has(orderId)) continue;
     seen.add(orderId);
-    const summary = summaryFromOrder(orderId, row, "linked");
-    const customer = orderCustomer(row);
+    const baseSummary = summaryFromOrder(orderId, row, "linked");
+    const detail = detailByOrderId.get(orderId);
+    const detailSummary = detail?.summary;
+    const summary: DropiLinkedOrder = detailSummary ? {
+      ...baseSummary,
+      status: detailSummary.status ?? baseSummary.status,
+      trackingCode: detailSummary.trackingCode ?? baseSummary.trackingCode,
+      createdAt: detailSummary.createdAt ?? baseSummary.createdAt,
+      carrier: detailSummary.carrier ?? baseSummary.carrier,
+      total: detailSummary.total ?? baseSummary.total,
+      currency: detailSummary.currency ?? baseSummary.currency,
+      items: detailSummary.items.length ? detailSummary.items : baseSummary.items,
+      updatedAt: detailSummary.updatedAt ?? baseSummary.updatedAt,
+    } : baseSummary;
+    const detailCustomer = detail ? orderCustomer(detail.data) : { name: null, phone: null };
+    const listCustomer = orderCustomer(row);
+    const customer = {
+      name: detailCustomer.name ?? listCustomer.name,
+      phone: detailCustomer.phone ?? listCustomer.phone,
+    };
     const matches = contactIdsByPhone.get(normalizedPhone(customer.phone)) ?? [];
     const contactId = matches.length === 1 ? matches[0]! : null;
-    imported.push({ orderId, contactId, createdAt: summary.createdAt ? new Date(summary.createdAt) : null, summary: { ...summary, customerName: customer.name } });
+    imported.push({
+      orderId,
+      contactId,
+      createdAt: summary.createdAt ? new Date(summary.createdAt) : null,
+      summary: { ...summary, customerName: customer.name, customerPhone: customer.phone },
+    });
   }
 
   for (let offset = 0; offset < imported.length; offset += 100) {
@@ -856,6 +911,12 @@ export async function listDropiOrders(organizationId: string) {
         name: item.productId ? localNameByDropiId.get(item.productId) ?? item.name : item.name,
       })),
     }))
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    .sort((a, b) => {
+      const aCreated = Date.parse(a.createdAt ?? a.updatedAt);
+      const bCreated = Date.parse(b.createdAt ?? b.updatedAt);
+      const aTimestamp = Number.isFinite(aCreated) ? aCreated : 0;
+      const bTimestamp = Number.isFinite(bCreated) ? bCreated : 0;
+      return bTimestamp - aTimestamp || b.updatedAt.localeCompare(a.updatedAt);
+    });
   return { connected: connection?.status === "connected", orders };
 }
