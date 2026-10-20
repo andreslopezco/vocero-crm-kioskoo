@@ -76,6 +76,99 @@ function normalizedPhone(value: string | null | undefined) {
   return digits;
 }
 
+function parseScalar(value: string): unknown {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const unquoted = (trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    ? trimmed.slice(1, -1)
+    : trimmed;
+  if (/^-?\\d+(?:\\.\\d+)?$/.test(unquoted)) return Number(unquoted);
+  if (unquoted === "true") return true;
+  if (unquoted === "false") return false;
+  if (unquoted === "null") return null;
+  return unquoted;
+}
+
+function splitDelimitedRow(line: string): string[] {
+  const values: string[] = [];
+  let value = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') {
+        value += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (character === "," && !quoted) {
+      values.push(value.trim());
+      value = "";
+    } else {
+      value += character;
+    }
+  }
+  values.push(value.trim());
+  return values;
+}
+
+function parseDropiText(text: string): unknown | undefined {
+  const root: Record<string, unknown> = {};
+  let activeObject: Record<string, unknown> | null = null;
+  let itemHeaders: string[] | null = null;
+
+  for (const line of text.split(/\\r?\\n/)) {
+    if (!line.trim()) continue;
+    const tableHeader = line.match(/^\\s*([\\w-]+)\\[\\d+\\]\\{([^}]+)\\}:\\s*$/);
+    if (tableHeader) {
+      const key = tableHeader[1];
+      itemHeaders = tableHeader[2].split(",").map((part) => part.trim());
+      root[key] = [];
+      activeObject = null;
+      continue;
+    }
+
+    const field = line.match(/^(\\s*)([\\w-]+):(?:\\s*(.*))?$/);
+    if (field) {
+      const indent = field[1].length;
+      const key = field[2];
+      const value = field[3] ?? "";
+      if (indent === 0) {
+        itemHeaders = null;
+        if (value.trim()) {
+          root[key] = parseScalar(value);
+          activeObject = null;
+        } else {
+          const nested: Record<string, unknown> = {};
+          root[key] = nested;
+          activeObject = nested;
+        }
+      } else if (activeObject) {
+        activeObject[key] = parseScalar(value);
+      }
+      continue;
+    }
+
+    if (itemHeaders && /^\\s+/.test(line)) {
+      const values = splitDelimitedRow(line.trim());
+      if (values.length > itemHeaders.length && itemHeaders.length >= 3) {
+        const trailingColumns = itemHeaders.length - 2;
+        values.splice(1, values.length - trailingColumns - 1, values.slice(1, values.length - trailingColumns).join(","));
+      }
+      const item = Object.fromEntries(itemHeaders.map((key, index) => [key, parseScalar(values[index] ?? "")]));
+      const key = Object.keys(root).find((candidate) => Array.isArray(root[candidate]) && candidate.toLowerCase().includes("item"));
+      const target = key ? root[key] as unknown[] : null;
+      if (target) target.push(item);
+    }
+  }
+
+  const keys = new Set(Object.keys(root).map(normalizedKey));
+  return keys.has("orderid") || keys.has("status") || keys.has("customer") || keys.has("items") || keys.has("products")
+    ? root
+    : undefined;
+}
+
 function decodeOrder(result: {
   content?: Array<{ type: string; text?: string }>;
   structuredContent?: unknown;
@@ -84,8 +177,8 @@ function decodeOrder(result: {
   if (result.isError) throw new DropiLinkError("Dropi no pudo encontrar o consultar ese pedido.", "provider_error");
 
   const parseJson = (candidate: string): unknown | undefined => {
-    const trimmed = candidate.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-    const candidates = [trimmed, trimmed.match(/[\[{][\s\S]*[\]}]/)?.[0]];
+    const trimmed = candidate.trim().replace(/^\`\`\`(?:json)?\\s*/i, "").replace(/\\s*\`\`\`$/, "");
+    const candidates = [trimmed, trimmed.match(/[\\[{][\\s\\S]*[\\]}]/)?.[0]];
     for (const value of candidates) {
       if (!value) continue;
       try {
@@ -113,12 +206,16 @@ function decodeOrder(result: {
   for (const part of text) {
     const parsed = parseJson(part);
     if (parsed !== undefined) return parsed;
+    const structured = parseDropiText(part);
+    if (structured !== undefined) return structured;
   }
-  const parsedCombined = parseJson(text.join("\n"));
+  const combined = text.join("\\n");
+  const parsedCombined = parseJson(combined);
   if (parsedCombined !== undefined) return parsedCombined;
+  const structuredCombined = parseDropiText(combined);
+  if (structuredCombined !== undefined) return structuredCombined;
   throw new DropiLinkError("Dropi devolvió una respuesta de pedido que no se pudo interpretar.", "invalid_response");
 }
-
 function summaryFromOrder(orderId: string, data: unknown, source: DropiLinkedOrder["source"]): DropiLinkedOrder {
   const rawItems = findArray(data, ["products", "items", "order_items", "details"]);
   const items = rawItems.slice(0, 20).flatMap((entry) => {
@@ -170,12 +267,14 @@ export async function listDropiOrdersForContact(organizationId: string, contactI
     source: "linked",
   }));
   for (const row of submissions) {
-    if (!row.providerOrderId && !row.shopOrderId) continue;
-    const exists = orders.some((order) => order.orderId === (row.providerOrderId ?? row.shopOrderId));
+    // A local Vocero shopOrderId (e.g. "voc-…") is not a Dropi order ID.
+    // Only expose submissions as provider orders when Dropi returned a real ID.
+    if (!row.providerOrderId) continue;
+    const exists = orders.some((order) => order.orderId === row.providerOrderId);
     if (exists) continue;
     const productLines = Array.isArray(row.payload.products) ? row.payload.products : [];
     orders.push({
-      orderId: row.providerOrderId ?? row.shopOrderId,
+      orderId: row.providerOrderId,
       status: row.providerStatus ?? row.status,
       trackingCode: null, total: null, currency: null,
       items: productLines.flatMap((item) => {
