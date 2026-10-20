@@ -84,6 +84,7 @@ export function OrdersClient() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -91,7 +92,24 @@ export function OrdersClient() {
     if (quiet) setRefreshing(true);
     else setLoading(true);
     setError(null);
+    if (!quiet) setNotice(null);
     try {
+      if (quiet) {
+        const refreshResponse = await fetch("/api/orders", { method: "POST", cache: "no-store" });
+        const refreshBody = await refreshResponse.json().catch(() => null) as
+          | { refreshedOrders?: number; reconciledOrders?: number; error?: { message?: string } }
+          | null;
+        if (!refreshResponse.ok || !refreshBody) {
+          throw new Error(refreshBody?.error?.message ?? "No se pudieron actualizar los pedidos.");
+        }
+        const refreshed = refreshBody.refreshedOrders ?? 0;
+        const reconciled = refreshBody.reconciledOrders ?? 0;
+        setNotice(
+          refreshed || reconciled
+            ? `Actualización lista: ${refreshed} pedido(s) consultado(s) en Dropi y ${reconciled} solicitud(es) de Vocero vinculada(s).`
+            : "Actualización lista. No hubo pedidos vinculados que requirieran sincronización."
+        );
+      }
       const response = await fetch("/api/orders", { cache: "no-store" });
       const body = await response.json().catch(() => null) as (OrdersResponse & { error?: { message?: string } }) | null;
       if (!response.ok || !body) throw new Error(body?.error?.message ?? "No se pudieron cargar los pedidos.");
@@ -176,6 +194,7 @@ export function OrdersClient() {
             </div>
 
             {error && <div role="alert" className="rounded-md border border-danger-soft bg-danger-tint px-4 py-3 text-sm text-danger-text">{error}</div>}
+            {notice && <div role="status" className="rounded-md border border-border-strong bg-subtle px-4 py-3 text-sm text-text-2">{notice}</div>}
 
             {loading ? (
               <div className="space-y-3" aria-label="Cargando pedidos">
