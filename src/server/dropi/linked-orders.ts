@@ -636,10 +636,30 @@ export async function refreshDropiOrders(organizationId: string) {
   return { refreshedOrders: imported.length, reconciledOrders, failedOrders: 0 };
 }
 
+/** Oculta un pedido de la tabla de Vocero; nunca cancela ni elimina el pedido en Dropi. */
+export async function dismissDropiOrder(organizationId: string, orderIdInput: string) {
+  const orderId = orderIdInput.trim();
+  if (!orderId || orderId.length > 100) throw new DropiLinkError("ID de pedido no válido.", "invalid_order_id");
+  const now = new Date();
+  await getDb().insert(schema.dropiOrderSync).values({
+    id: newId("dropiOrderSync"),
+    organizationId,
+    orderId,
+    contactId: null,
+    snapshot: {},
+    ignored: true,
+    createdAt: now,
+    updatedAt: now,
+  }).onConflictDoUpdate({
+    target: [schema.dropiOrderSync.organizationId, schema.dropiOrderSync.orderId],
+    set: { ignored: true, updatedAt: now },
+  });
+}
+
 /** Lista pedidos creados desde Vocero y pedidos de Dropi vinculados, dentro de la organización. */
 export async function listDropiOrders(organizationId: string) {
   const db = getDb();
-  const [connection, linked, submissions, catalogProducts] = await Promise.all([
+  const [connection, linked, submissions, syncedOrders, ignoredOrders, catalogProducts] = await Promise.all([
     getDropiConnection(organizationId),
     db.select({
       providerOrderId: schema.dropiOrderLink.providerOrderId,
@@ -668,14 +688,30 @@ export async function listDropiOrders(organizationId: string) {
       .where(scoped(schema.dropiOrderSubmission.organizationId, organizationId))
       .orderBy(desc(schema.dropiOrderSubmission.updatedAt)),
     db.select({
+      orderId: schema.dropiOrderSync.orderId,
+      snapshot: schema.dropiOrderSync.snapshot,
+      contactId: schema.dropiOrderSync.contactId,
+      contactName: schema.contact.name,
+      contactPhone: schema.contact.phone,
+      updatedAt: schema.dropiOrderSync.updatedAt,
+    }).from(schema.dropiOrderSync)
+      .leftJoin(schema.contact, eq(schema.dropiOrderSync.contactId, schema.contact.id))
+      .where(scoped(schema.dropiOrderSync.organizationId, organizationId, eq(schema.dropiOrderSync.ignored, false)))
+      .orderBy(desc(schema.dropiOrderSync.updatedAt)),
+    db.select({ orderId: schema.dropiOrderSync.orderId })
+      .from(schema.dropiOrderSync)
+      .where(scoped(schema.dropiOrderSync.organizationId, organizationId, eq(schema.dropiOrderSync.ignored, true))),
+    db.select({
       name: schema.metaCatalogProduct.name,
       attributes: schema.metaCatalogProduct.attributes,
     }).from(schema.metaCatalogProduct)
       .where(scoped(schema.metaCatalogProduct.organizationId, organizationId)),
   ]);
 
+  const hiddenIds = new Set(ignoredOrders.map((row) => row.orderId));
   const byProviderId = new Map<string, DropiOrganizationOrder>();
   for (const row of linked) {
+    if (hiddenIds.has(row.providerOrderId)) continue;
     const snapshot = row.snapshot;
     byProviderId.set(row.providerOrderId, {
       orderId: row.providerOrderId,
@@ -696,8 +732,31 @@ export async function listDropiOrders(organizationId: string) {
     });
   }
 
+  for (const row of syncedOrders) {
+    if (hiddenIds.has(row.orderId) || byProviderId.has(row.orderId)) continue;
+    const customer = orderCustomer(row.snapshot);
+    byProviderId.set(row.orderId, {
+      orderId: row.orderId,
+      providerOrderId: row.orderId,
+      shopOrderId: null,
+      contactId: row.contactId,
+      contactName: row.contactName ?? customer.name ?? "Sin contacto asociado",
+      contactPhone: row.contactPhone ?? customer.phone,
+      status: textValue(findValue(row.snapshot, ["status", "order_status", "orderStatus"])),
+      trackingCode: textValue(findValue(row.snapshot, ["tracking_code", "trackingCode", "tracking_number", "guide"])),
+      createdAt: textValue(findValue(row.snapshot, ["created_at", "createdAt"])) ?? null,
+      carrier: carrierFromOrder(row.snapshot),
+      total: textValue(findValue(row.snapshot, ["total", "total_amount", "grand_total", "order_total"])),
+      currency: textValue(findValue(row.snapshot, ["currency", "currency_code"])),
+      items: organizationOrderItems(row.snapshot),
+      updatedAt: row.updatedAt.toISOString(),
+      source: "dropi",
+    });
+  }
+
   const unlinked: DropiOrganizationOrder[] = [];
   for (const row of submissions) {
+    if (hiddenIds.has(row.providerOrderId ?? row.shopOrderId)) continue;
     if (row.providerOrderId && byProviderId.has(row.providerOrderId)) continue;
     const items = organizationOrderItems(row.payload);
     const payloadTotal = textValue(findValue(row.payload, ["total", "total_amount", "grand_total", "order_total"]));
