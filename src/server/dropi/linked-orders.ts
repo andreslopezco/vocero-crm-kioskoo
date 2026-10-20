@@ -3,6 +3,7 @@ import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
 import { getDropiConnection } from "./credentials";
+import { phoneFromFicha } from "@/server/bot/ficha";
 import { callDropiTool, listDropiTools } from "./mcp-client";
 
 export class DropiLinkError extends Error {
@@ -301,7 +302,7 @@ export async function linkDropiOrderToContact(organizationId: string, contactId:
   const connection = await getDropiConnection(organizationId);
   if (!connection || connection.status !== "connected") throw new DropiLinkError("Conecta Dropi antes de vincular pedidos.", "not_connected");
   const db = getDb();
-  const contactRows = await db.select({ phone: schema.contact.phone }).from(schema.contact).where(scoped(
+  const contactRows = await db.select({ phone: schema.contact.phone, ficha: schema.contact.ficha }).from(schema.contact).where(scoped(
     schema.contact.organizationId, organizationId, eq(schema.contact.id, contactId)
   )).limit(1);
   if (!contactRows[0]) throw new DropiLinkError("Contacto no encontrado.", "contact_not_found");
@@ -317,7 +318,15 @@ export async function linkDropiOrderToContact(organizationId: string, contactId:
   const result = await callDropiTool(organizationId, "get_order", args);
   if (result.isError) throw new DropiLinkError("Dropi no pudo encontrar o consultar ese pedido.", "provider_error");
   const orderData = decodeOrder(result);
-  assertPhoneOwnership(contactRows[0].phone, orderData);
+  const contactPhone = contactRows[0].phone ?? phoneFromFicha(contactRows[0].ficha);
+  assertPhoneOwnership(contactPhone, orderData);
+  // A ficha antigua puede contener un teléfono que aún no llegó al campo principal.
+  // Tras verificarlo contra Dropi, lo promovemos para que el contacto quede corregido.
+  if (!contactRows[0].phone && contactPhone) {
+    await db.update(schema.contact).set({ phone: contactPhone, updatedAt: new Date() }).where(scoped(
+      schema.contact.organizationId, organizationId, eq(schema.contact.id, contactId)
+    ));
+  }
   const snapshot = summaryFromOrder(orderId, orderData, "linked");
   const existing = await db.select().from(schema.dropiOrderLink).where(scoped(
     schema.dropiOrderLink.organizationId, organizationId, eq(schema.dropiOrderLink.providerOrderId, orderId)
