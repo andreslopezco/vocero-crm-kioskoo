@@ -503,7 +503,7 @@ export function ContactPanel({
                 </span>
                 <div className="min-w-0">
                   <p className="text-[13px] font-semibold">Pedidos Dropi</p>
-                  <p className="text-[11px] text-text-3">{dropiOrders.length} {dropiOrders.length === 1 ? "pedido vinculado" : "pedidos vinculados"}</p>
+                  <p className="text-[11px] text-text-3">{dropiOrders.length} {dropiOrders.length === 1 ? "pedido" : "pedidos"}</p>
                 </div>
               </div>
               <span className={cn("rounded-full px-2 py-1 text-[10px] font-medium", dropiConnected ? "bg-brand-soft text-brand-text" : "bg-warning-tint text-warning-text")}>
