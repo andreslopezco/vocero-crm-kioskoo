@@ -74,6 +74,11 @@
     --warning-soft: #f8e3b5;
     --warning-text: #935f0b;
 
+    --attention: #f97316;
+    --attention-tint: #fff7ed;
+    --attention-soft: #fed7aa;
+    --attention-text: #9a3412;
+
     --danger: #d94a4a;
     --danger-tint: #fdf0f0;
     --danger-soft: #f5cccc;
@@ -163,6 +168,11 @@
     --warning-tint: #453315;
     --warning-soft: #765824;
     --warning-text: #f7c86f;
+
+    --attention: #fb923c;
+    --attention-tint: #431407;
+    --attention-soft: #9a3412;
+    --attention-text: #fdba74;
 
     --danger: #ef6b6b;
     --danger-tint: #562727;
