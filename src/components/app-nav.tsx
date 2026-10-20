@@ -45,6 +45,7 @@ export function AppNav({
   commit,
   agenda = false,
   catalogo = false,
+  dropi = false,
   kicker = "CRM · WhatsApp",
   open = false,
   onClose,
@@ -69,6 +70,8 @@ export function AppNav({
   agenda?: boolean;
   /** 031 — Catálogo Meta visible solo con la bandera activa. */
   catalogo?: boolean;
+  /** 033 — Panel de pedidos Dropi. */
+  dropi?: boolean;
   /** Solo aplica por debajo de `lg`: en escritorio el lateral es fijo. */
   open?: boolean;
   onClose?: () => void;
@@ -98,7 +101,7 @@ export function AppNav({
   const version = commit ?? { commit: BUILD_COMMIT, verified: BUILD_COMMIT !== "" };
   // #87 — Qué hay en el menú y en qué grupo lo decide `appNavGroups`; aquí
   // solo se pinta.
-  const groups = appNavGroups({ agenda, catalogo, role });
+  const groups = appNavGroups({ agenda, catalogo, dropi, role });
 
   function renderItem(item: NavItem) {
     const active = isNavActive(pathname, item.href);
