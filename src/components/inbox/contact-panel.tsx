@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   AlertTriangle,
   Cable,
-  Link2,
   Loader2,
   PackageCheck,
   Pencil,
@@ -145,13 +144,8 @@ export function ContactPanel({
   const [brain, setBrain] = useState<BrainStatusDto | null>(null);
   const [dropiPanelAvailable, setDropiPanelAvailable] = useState(false);
   const [dropiConnected, setDropiConnected] = useState(false);
-  const [dropiCanLink, setDropiCanLink] = useState(false);
   const [dropiOrders, setDropiOrders] = useState<DropiOrderPanelItem[]>([]);
   const [visibleDropiOrderCount, setVisibleDropiOrderCount] = useState(2);
-  const [dropiOrderId, setDropiOrderId] = useState("");
-  const [dropiLoading, setDropiLoading] = useState(false);
-  const [dropiError, setDropiError] = useState("");
-  const [dropiNotice, setDropiNotice] = useState("");
 
   const contactId = conversation.contact.id;
 
@@ -183,7 +177,6 @@ export function ContactPanel({
     if (!data) return;
     setDropiPanelAvailable(true);
     setDropiConnected(Boolean(data.connected));
-    setDropiCanLink(Boolean(data.canLink));
     setDropiOrders(Array.isArray(data.orders) ? data.orders : []);
   }, [contactId]);
   // Carga inicial (incluye notas): se re-ejecuta al cambiar de contacto.
@@ -236,10 +229,7 @@ export function ContactPanel({
 
   useEffect(() => {
     setNotesLoaded(false);
-    setDropiOrderId("");
     setVisibleDropiOrderCount(2);
-    setDropiError("");
-    setDropiNotice("");
     // Al cambiar de contacto no puede asomarse el anuncio del anterior.
     setAnuncio(null);
     void refetch();
@@ -309,24 +299,6 @@ export function ContactPanel({
       body: JSON.stringify({ notes }),
     }).catch(() => null);
     setSavingNotes(false);
-  }
-
-  async function linkDropiOrder() {
-    if (!dropiOrderId.trim()) return;
-    setDropiLoading(true); setDropiError(""); setDropiNotice("");
-    const response = await fetch(`/api/contacts/${contactId}/dropi-orders`, {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ orderId: dropiOrderId.trim() }),
-    }).catch(() => null);
-    const data = await response?.json().catch(() => null);
-    if (!response?.ok) {
-      setDropiError(data?.message ?? data?.error?.message ?? "No se pudo vincular el pedido.");
-    } else {
-      setDropiOrderId("");
-      setDropiNotice("Pedido vinculado; la IA ya puede usar su información.");
-      await loadDropiOrders();
-    }
-    setDropiLoading(false);
   }
 
   const currentIndex = stages.findIndex((s) => s.id === currentStageId);
@@ -539,30 +511,11 @@ export function ContactPanel({
               </span>
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-text-3">
-              Vincula un pedido existente por su ID. La IA podrá usar su estado y guía como contexto.
+              La IA puede consultar el estado, la transportadora, la guía y el historial de pedidos de este contacto.
             </p>
-            {dropiConnected && dropiCanLink ? (
-              <form className="mt-3 flex gap-2" onSubmit={(event) => { event.preventDefault(); void linkDropiOrder(); }}>
-                <input
-                  aria-label="ID del pedido en Dropi"
-                  placeholder="ID del pedido en Dropi"
-                  value={dropiOrderId}
-                  onChange={(event) => setDropiOrderId(event.target.value)}
-                  className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  maxLength={100}
-                />
-                <Button size="sm" type="submit" disabled={dropiLoading || !dropiOrderId.trim()} className="shrink-0">
-                  {dropiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" strokeWidth={1.8} />}
-                  <span className="ml-1">Vincular</span>
-                </Button>
-              </form>
-            ) : dropiConnected ? (
-              <p className="mt-2 text-[11px] text-text-3">Solo un propietario o administrador puede vincular o desvincular pedidos.</p>
-            ) : (
+            {!dropiConnected && (
               <Link href="/settings/dropi" className="mt-2 inline-flex text-xs font-medium text-brand-text underline underline-offset-2">Conectar Dropi →</Link>
             )}
-            {dropiError && <p role="alert" className="mt-2 text-xs text-danger-text">{dropiError}</p>}
-            {dropiNotice && <p role="status" className="mt-2 text-xs text-success-text">{dropiNotice}</p>}
             {dropiOrders.length > 0 && (
               <ul className="mt-3 space-y-2">
                 {dropiOrders.slice(0, visibleDropiOrderCount).map((order) => (
