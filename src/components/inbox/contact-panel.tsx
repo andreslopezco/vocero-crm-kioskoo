@@ -324,7 +324,7 @@ export function ContactPanel({
                     autoFocus
                     value={phoneDraft}
                     onChange={(event) => setPhoneDraft(event.target.value)}
-                    placeholder="Agregar teléfono"
+                    placeholder="Ej. +57 310 230 7059"
                     className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
                   />
                   <button
