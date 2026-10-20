@@ -3,13 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
-  CalendarDays,
-  CircleCheck,
   PackageCheck,
   RefreshCw,
   Search,
   Truck,
-  UserRound,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -152,7 +149,7 @@ export function OrdersClient() {
           Actualizar
         </Button>
       </header>
-      <div className="mx-auto w-full max-w-6xl flex-1 space-y-6 overflow-y-auto p-4 sm:p-6 lg:p-8">
+      <div className="w-full flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
 
         {!data?.connected && (
           <div className="flex items-start gap-3 rounded-md border border-warning-soft bg-warning-tint p-4 text-sm text-warning-text" role="status">
@@ -200,50 +197,74 @@ export function OrdersClient() {
             {notice && <div role="status" className="rounded-md border border-border-strong bg-subtle px-4 py-3 text-sm text-text-2">{notice}</div>}
 
             {loading ? (
-              <div className="space-y-3" aria-label="Cargando pedidos">
-                {[0, 1, 2].map((item) => <div key={item} className="h-28 animate-pulse rounded-md bg-subtle" />)}
+              <div className="overflow-hidden rounded-lg border bg-card" aria-label="Cargando pedidos">
+                <div className="h-10 animate-pulse border-b bg-subtle" />
+                {[0, 1, 2].map((item) => <div key={item} className="h-16 animate-pulse border-b last:border-0 bg-card" />)}
               </div>
             ) : orders.length ? (
-              <div className="space-y-3">
-                {orders.map((order) => (
-                  <article key={order.providerOrderId ?? order.shopOrderId ?? order.orderId} className="rounded-md border border-border-strong p-4 sm:p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="break-all text-sm font-bold">{order.providerOrderId ? `Pedido ${order.providerOrderId}` : "Pedido pendiente de revisión"}</h3>
+              <div className="overflow-x-auto rounded-lg border bg-card">
+                <table aria-label="Pedidos registrados" className="w-full min-w-[940px] table-fixed text-sm">
+                  <colgroup>
+                    <col className="w-[21%]" />
+                    <col className="w-[19%]" />
+                    <col className="w-[27%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[9%]" />
+                  </colgroup>
+                  <thead className="kicker border-b bg-subtle text-left">
+                    <tr>
+                      <th scope="col" className="px-3 py-2.5 font-medium sm:px-4">Pedido</th>
+                      <th scope="col" className="px-3 py-2.5 font-medium">Contacto</th>
+                      <th scope="col" className="px-3 py-2.5 font-medium">Productos</th>
+                      <th scope="col" className="px-3 py-2.5 font-medium">Actualizado</th>
+                      <th scope="col" className="px-3 py-2.5 font-medium">Total</th>
+                      <th scope="col" className="px-3 py-2.5 font-medium">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map((order) => (
+                      <tr key={order.providerOrderId ?? order.shopOrderId ?? order.orderId} className="border-t align-middle first:border-t-0">
+                        <td className="min-w-0 px-3 py-3 sm:px-4">
+                          <p className="break-all font-semibold leading-5">
+                            {order.providerOrderId ? `Pedido ${order.providerOrderId}` : "Pedido pendiente de revisión"}
+                          </p>
+                          {order.trackingCode
+                            ? <p className="mt-1 flex items-center gap-1.5 text-xs text-text-3"><Truck className="h-3.5 w-3.5 shrink-0" />Guía {order.trackingCode}</p>
+                            : <p className="mt-1 truncate text-xs text-text-3" title={order.shopOrderId ?? undefined}>{order.shopOrderId ? `Referencia ${order.shopOrderId}` : "Sin guía"}</p>}
+                        </td>
+                        <td className="min-w-0 px-3 py-3">
+                          <p className="truncate font-medium" title={order.contactName}>{order.contactName}</p>
+                          <p className="mt-0.5 truncate text-xs text-text-3">{order.contactPhone ?? "Sin teléfono"}</p>
+                        </td>
+                        <td className="px-3 py-3">
+                          {order.items.length ? (
+                            <div className="space-y-1">
+                              {order.items.slice(0, 2).map((item, index) => (
+                                <p key={item.name + index} className="flex min-w-0 items-center justify-between gap-2">
+                                  <span className="min-w-0 truncate" title={item.name}>{item.name}</span>
+                                  {item.quantity && <span className="shrink-0 text-xs text-text-3">× {item.quantity}</span>}
+                                </p>
+                              ))}
+                              {order.items.length > 2 && <p className="text-xs text-text-3">y {order.items.length - 2} producto(s) más</p>}
+                            </div>
+                          ) : <span className="text-text-3">Detalle no disponible</span>}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-3 text-xs text-text-2">{displayDate(order.updatedAt)}</td>
+                        <td className="whitespace-nowrap px-3 py-3 font-semibold">
+                          {order.total ? <>{order.total}{order.currency ? ` ${order.currency}` : ""}</> : <span className="font-normal text-text-3">—</span>}
+                        </td>
+                        <td className="px-3 py-3">
                           <Badge variant={statusVariant(order.status)}>{statusText(order.status)}</Badge>
-                        </div>
-                        {order.trackingCode && <p className="mt-1 flex items-center gap-1.5 text-xs text-text-2"><Truck className="h-3.5 w-3.5" />Guía {order.trackingCode}</p>}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                      <div>
-                        <p className="flex items-center gap-2 text-xs font-semibold text-text-3"><UserRound className="h-3.5 w-3.5" />Contacto</p>
-                        <p className="mt-1 text-sm font-medium">{order.contactName}</p>
-                        {order.contactPhone && <p className="text-xs text-text-2">{order.contactPhone}</p>}
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-text-3">Productos</p>
-                        {order.items.length ? (
-                          <ul className="mt-1 space-y-1 text-sm">
-                            {order.items.slice(0, 4).map((item, index) => <li key={item.name + index} className="flex justify-between gap-3"><span className="min-w-0 truncate">{item.name}</span>{item.quantity && <span className="shrink-0 text-text-2">× {item.quantity}</span>}</li>)}
-                            {order.items.length > 4 && <li className="text-xs text-text-3">y {order.items.length - 4} productos más</li>}
-                          </ul>
-                        ) : <p className="mt-1 text-sm text-text-3">Detalle no disponible</p>}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-text-3">
-                      <span className="flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5" />{displayDate(order.updatedAt)}</span>
-                      {order.total && <span className="font-semibold text-foreground">{order.total}{order.currency ? " " + order.currency : ""}</span>}
-                    </div>
-                  </article>
-                ))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : (
-              <div className="rounded-md border border-dashed p-8 text-center">
-                <CircleCheck className="mx-auto h-8 w-8 text-text-3" />
+              <div className="rounded-lg border border-dashed p-8 text-center">
+                <PackageCheck className="mx-auto h-8 w-8 text-text-3" />
                 <p className="mt-3 text-sm font-semibold">{data?.orders.length ? "No hay pedidos con esos filtros" : "Aún no hay pedidos"}</p>
                 <p className="mx-auto mt-1 max-w-md text-sm text-text-2">
                   {data?.orders.length ? "Prueba otra búsqueda o cambia el filtro." : "Cuando Vocero prepare un pedido o vincules uno de Dropi a un contacto, aparecerá aquí."}
