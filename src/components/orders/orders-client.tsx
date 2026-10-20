@@ -59,7 +59,7 @@ function statusText(value: string | null) {
 function statusVariant(value: string | null): "success" | "warning" | "destructive" | "secondary" {
   const status = (value ?? "").trim().toLowerCase();
   if (/delivered|entregado|complete/.test(status)) return "success";
-  if (/cancel|cancelado|reject|rechaz|failed|error/.test(status)) return "destructive";
+  if (/cancel|cancelado|reject|rechaz|devol|return|failed|error/.test(status)) return "destructive";
   if (/pending[ _-]*confirm|pendiente.*confirm|needs_review|review/.test(status)) return "warning";
   return "secondary";
 }
@@ -378,7 +378,7 @@ export function OrdersClient() {
                         </td>
                         <td className="px-3 py-3">
                           <Badge
-                            className="max-w-full truncate whitespace-nowrap px-1 py-0 text-[9px] leading-3"
+                            className="max-w-full truncate whitespace-nowrap uppercase px-1 py-0 text-[9px] leading-3"
                             title={statusText(order.status)}
                             variant={statusVariant(order.status)}
                           >
