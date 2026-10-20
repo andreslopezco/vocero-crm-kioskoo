@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, Image as ImageIcon, PackageSearch, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, Image as ImageIcon, PackageSearch, Pencil, RefreshCw, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -42,7 +42,7 @@ type ProductForm = {
   size: string;
   pattern: string;
 };
-type ProductEditor = { mode: "create" | "edit"; product?: Product };
+type ProductEditor = { product: Product };
 
 const EMPTY_FORM: ProductForm = {
   retailerId: "", dropiProductId: "", name: "", description: "", availability: "", condition: "",
@@ -224,11 +224,11 @@ export function CatalogPage() {
     }
   }
 
-  function openEditor(mode: "create" | "edit", product?: Product) {
+  function openEditor(product: Product) {
     setSuccess(null);
-    setForm(product ? formFromProduct(product) : EMPTY_FORM);
+    setForm(formFromProduct(product));
     setFormError(null);
-    setEditor({ mode, product });
+    setEditor({ product });
   }
 
   async function saveProduct(event: React.FormEvent<HTMLFormElement>) {
@@ -238,7 +238,7 @@ export function CatalogPage() {
     setFormError(null);
     try {
       const response = await fetch("/api/settings/catalog/products", {
-        method: editor.mode === "create" ? "POST" : "PUT",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, price: form.price.trim(), currency: form.currency.trim().toUpperCase() }),
       });
@@ -247,7 +247,7 @@ export function CatalogPage() {
       setEditor(null);
       await load();
       setSuccess(data.synced
-        ? editor.mode === "create" ? "Producto creado y relación local con Dropi guardada." : "Producto actualizado y relación local con Dropi guardada."
+        ? "Producto actualizado y relación local con Dropi guardada."
         : "Meta guardó el producto, pero no se pudo actualizar la vista. Pulsa «Sincronizar» para recargarla.");
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "No se pudo guardar el producto.");
@@ -284,9 +284,6 @@ export function CatalogPage() {
             <RefreshCw className={`mr-1.5 h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
             {syncing ? "Sincronizando…" : "Sincronizar"}
           </Button>
-          {catalog && <Button size="sm" onClick={() => openEditor("create")}>
-            <Plus className="mr-1.5 h-4 w-4" /> Nuevo producto
-          </Button>}
         </div>
       </header>
 
@@ -368,7 +365,7 @@ export function CatalogPage() {
                             </Button> : <span className="text-text-3">—</span>}
                           </td>
                           <td className="px-2 py-3 text-right">
-                            <Button size="icon" variant="ghost" aria-label={`Editar ${product.name}`} title={`Editar ${product.name}`} onClick={() => openEditor("edit", product)}>
+                            <Button size="icon" variant="ghost" aria-label={`Editar ${product.name}`} title={`Editar ${product.name}`} onClick={() => openEditor(product)}>
                               <Pencil className="h-4 w-4" />
                             </Button>
                           </td>
@@ -424,7 +421,7 @@ export function CatalogPage() {
         <section role="dialog" aria-modal="true" aria-labelledby="catalog-product-title" className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-xl border bg-card shadow-xl">
           <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-card px-5 py-4">
             <div>
-              <h3 id="catalog-product-title" className="text-base font-semibold">{editor.mode === "create" ? "Nuevo producto" : "Editar producto"}</h3>
+              <h3 id="catalog-product-title" className="text-base font-semibold">Editar producto</h3>
               <p className="mt-1 text-xs text-text-3">Los datos comerciales se guardan en Meta; el ID de Dropi se conserva solo en el catálogo local.</p>
             </div>
             <Button type="button" size="icon" variant="ghost" aria-label="Cerrar" disabled={saving} onClick={() => setEditor(null)}>
@@ -518,7 +515,7 @@ export function CatalogPage() {
             <div className="flex justify-end gap-2 border-t pt-4">
               <Button type="button" variant="secondary" disabled={saving} onClick={() => setEditor(null)}>Cancelar</Button>
               <Button type="submit" disabled={saving}>
-                {saving ? "Guardando…" : editor.mode === "create" ? "Crear producto" : "Guardar cambios"}
+                {saving ? "Guardando…" : "Guardar cambios"}
               </Button>
             </div>
           </form>
