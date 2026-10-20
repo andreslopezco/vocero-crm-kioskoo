@@ -9,6 +9,7 @@ import {
   Search,
   Trash2,
   Truck,
+  UserPlus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ type Order = {
 };
 
 type OrdersResponse = { connected: boolean; orders: Order[] };
+type ContactOption = { id: string; name: string; phone: string | null };
 type Filter = "all" | "review";
 
 function statusText(value: string | null) {
@@ -121,6 +123,11 @@ export function OrdersClient() {
   const [filter, setFilter] = useState<Filter>("all");
   const [actionOrderId, setActionOrderId] = useState<string | null>(null);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
+  const [assignmentOrderId, setAssignmentOrderId] = useState<string | null>(null);
+  const [contactQuery, setContactQuery] = useState("");
+  const [contactOptions, setContactOptions] = useState<ContactOption[]>([]);
+  const [contactLookupBusy, setContactLookupBusy] = useState(false);
+  const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
 
   const load = useCallback(async (quiet = false) => {
     if (quiet) setRefreshing(true);
@@ -161,6 +168,32 @@ export function OrdersClient() {
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    const query = contactQuery.trim();
+    if (!assignmentOrderId || query.length < 2) {
+      setContactOptions([]);
+      setContactLookupBusy(false);
+      return;
+    }
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      setContactLookupBusy(true);
+      try {
+        const response = await fetch(`/api/contacts?q=${encodeURIComponent(query)}`, { cache: "no-store" });
+        const body = await response.json().catch(() => null) as { contacts?: ContactOption[] } | null;
+        if (active) setContactOptions(response.ok ? body?.contacts ?? [] : []);
+      } catch {
+        if (active) setContactOptions([]);
+      } finally {
+        if (active) setContactLookupBusy(false);
+      }
+    }, 250);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [assignmentOrderId, contactQuery]);
+
   const orders = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("es");
     return (data?.orders ?? []).filter((order) => {
@@ -193,6 +226,29 @@ export function OrdersClient() {
       setError(cause instanceof Error ? cause.message : "No se pudo eliminar el pedido de Vocero.");
     } finally {
       setDeletingOrderId(null);
+    }
+  }
+
+  async function assignContact(order: Order, contact: ContactOption) {
+    const orderId = order.providerOrderId ?? order.shopOrderId ?? order.orderId;
+    setAssigningOrderId(orderId);
+    setError(null);
+    try {
+      const response = await fetch("/api/orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId, contactId: contact.id }),
+      });
+      const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+      if (!response.ok) throw new Error(body?.error?.message ?? "No se pudo asignar el pedido.");
+      setAssignmentOrderId(null);
+      setActionOrderId(null);
+      setContactQuery("");
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudo asignar el pedido.");
+    } finally {
+      setAssigningOrderId(null);
     }
   }
 
@@ -353,12 +409,64 @@ export function OrdersClient() {
                             {actionOrderId === (order.providerOrderId ?? order.shopOrderId ?? order.orderId) && (
                               <div
                                 role="menu"
-                                className={`absolute right-0 z-30 min-w-44 rounded-md border bg-card p-1 shadow-lg ${index === 0 ? "top-full mt-1" : "bottom-full mb-1"}`}
+                                className={`absolute right-0 z-30 rounded-md border bg-card p-1 shadow-lg ${assignmentOrderId === (order.providerOrderId ?? order.shopOrderId ?? order.orderId) ? "w-64" : "min-w-44"} ${index === 0 ? "top-full mt-1" : "bottom-full mb-1"}`}
                               >
+                                {order.source === "dropi" && !order.contactId && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => {
+                                        const id = order.providerOrderId ?? order.shopOrderId ?? order.orderId;
+                                        setAssignmentOrderId((current) => current === id ? null : id);
+                                        setContactQuery("");
+                                        setContactOptions([]);
+                                      }}
+                                      className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-subtle"
+                                    >
+                                      <UserPlus className="h-4 w-4" />
+                                      Asignar a un contacto
+                                    </button>
+                                    {assignmentOrderId === (order.providerOrderId ?? order.shopOrderId ?? order.orderId) && (
+                                      <div className="space-y-2 border-y px-2 py-2">
+                                        <Input
+                                          autoFocus
+                                          value={contactQuery}
+                                          onChange={(event) => setContactQuery(event.target.value)}
+                                          placeholder="Buscar nombre o teléfono"
+                                          aria-label="Buscar contacto para asignar pedido"
+                                          className="h-8 text-xs"
+                                        />
+                                        {contactQuery.trim().length < 2 ? (
+                                          <p className="text-xs text-text-3">Escribe al menos 2 caracteres.</p>
+                                        ) : contactLookupBusy ? (
+                                          <p className="text-xs text-text-3">Buscando contactos…</p>
+                                        ) : contactOptions.length ? (
+                                          <div className="max-h-40 space-y-1 overflow-y-auto">
+                                            {contactOptions.map((contact) => (
+                                              <button
+                                                key={contact.id}
+                                                type="button"
+                                                disabled={assigningOrderId !== null}
+                                                onClick={() => void assignContact(order, contact)}
+                                                className="flex w-full flex-col rounded px-2 py-1.5 text-left hover:bg-subtle disabled:opacity-50"
+                                              >
+                                                <span className="w-full truncate text-xs font-medium">{contact.name}</span>
+                                                {contact.phone && <span className="w-full truncate text-[10px] text-text-3">{contact.phone}</span>}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <p className="text-xs text-text-3">No se encontraron contactos.</p>
+                                        )}
+                                      </div>
+                                    )}
+                                  </>
+                                )}
                                 <button
                                   type="button"
                                   role="menuitem"
-                                  disabled={deletingOrderId !== null}
+                                  disabled={deletingOrderId !== null || assigningOrderId !== null}
                                   onClick={() => void removeOrder(order)}
                                   className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-danger-text hover:bg-danger-tint disabled:opacity-50"
                                 >
