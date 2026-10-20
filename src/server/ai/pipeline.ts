@@ -292,7 +292,7 @@ export async function runAgentTurn(
   }
   const catalogContext = catalog ? catalogContextForTurn(catalog, lastInbound.text ?? "") : null;
   const dropi = !conversation.isTest && dropiOrdersEnabled()
-    ? await dropiPromptContext(organizationId, history.filter((m) => m.direction === "in").slice(-5).map((m) => m.text ?? "").join("\n"))
+    ? await dropiPromptContext(organizationId, history.filter((m) => m.direction === "in").slice(-5).map((m) => m.text ?? "").join("\n"), conversation.contactId)
     : null;
 
   /**
