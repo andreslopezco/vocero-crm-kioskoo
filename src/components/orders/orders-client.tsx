@@ -375,7 +375,7 @@ export function OrdersClient() {
           <Card>
             <CardContent className="flex items-center gap-3 pt-5">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-warning-tint text-warning-text"><Clock3 className="h-4 w-4" /></span>
-              <div><p className="text-xs font-medium text-text-3">Pendientes de confirmación</p><p className="text-xl font-bold">{loading ? "—" : pendingConfirmation}</p></div>
+              <div><p className="text-xs font-medium text-text-3">Pendientes</p><p className="text-xl font-bold">{loading ? "—" : pendingConfirmation}</p></div>
             </CardContent>
           </Card>
           <Card>
