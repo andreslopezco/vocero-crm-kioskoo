@@ -5,6 +5,7 @@ import { scoped } from "@/lib/db/tenant";
 import { getDropiConnection } from "./credentials";
 import { phoneFromFicha } from "@/server/bot/ficha";
 import { callDropiTool, listDropiTools } from "./mcp-client";
+import { dropiProductIdFromAttributes } from "./product-mapping";
 
 export class DropiLinkError extends Error {
   constructor(message: string, readonly code: string) { super(message); }
@@ -16,7 +17,7 @@ export type DropiLinkedOrder = {
   trackingCode: string | null;
   total: string | null;
   currency: string | null;
-  items: { name: string; quantity: string | null }[];
+  items: { name: string; quantity: string | null; productId?: string | null }[];
   updatedAt: string;
   source: "linked" | "vocero";
 };
@@ -227,9 +228,10 @@ function summaryFromOrder(orderId: string, data: unknown, source: DropiLinkedOrd
   const rawItems = findArray(data, ["products", "items", "order_items", "details"]);
   const items = rawItems.slice(0, 20).flatMap((entry) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const productId = textValue(findValue(entry, ["product_retailer_id", "product_id", "productId", "id", "sku"]));
     const name = textValue(findValue(entry, ["product_name", "name", "title", "product"]));
     const quantity = textValue(findValue(entry, ["quantity", "qty"]));
-    return name ? [{ name, quantity }] : [];
+    return name || productId ? [{ name: name ?? "Producto", quantity, productId }] : [];
   });
   const updated = findValue(data, ["updated_at", "updatedAt", "created_at", "createdAt"]);
   return {
@@ -376,16 +378,17 @@ function organizationOrderItems(value: unknown) {
     .slice(0, 20)
     .flatMap((entry) => {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
-      const name = textValue(findValue(entry, ["product_name", "name", "title", "product", "product_id", "id"]));
-      if (!name) return [];
-      return [{ name, quantity: textValue(findValue(entry, ["quantity", "qty"])) }];
+      const productId = textValue(findValue(entry, ["product_retailer_id", "product_id", "productId", "id", "sku"]));
+      const name = textValue(findValue(entry, ["product_name", "name", "title", "product"]));
+      if (!name && !productId) return [];
+      return [{ name: name ?? "Producto", quantity: textValue(findValue(entry, ["quantity", "qty"])), productId }];
     });
 }
 
 /** Lista pedidos creados desde Vocero y pedidos de Dropi vinculados, dentro de la organización. */
 export async function listDropiOrders(organizationId: string) {
   const db = getDb();
-  const [connection, linked, submissions] = await Promise.all([
+  const [connection, linked, submissions, catalogProducts] = await Promise.all([
     getDropiConnection(organizationId),
     db.select({
       providerOrderId: schema.dropiOrderLink.providerOrderId,
@@ -412,6 +415,11 @@ export async function listDropiOrders(organizationId: string) {
       .innerJoin(schema.contact, eq(schema.dropiOrderSubmission.contactId, schema.contact.id))
       .where(scoped(schema.dropiOrderSubmission.organizationId, organizationId))
       .orderBy(desc(schema.dropiOrderSubmission.updatedAt)),
+    db.select({
+      name: schema.metaCatalogProduct.name,
+      attributes: schema.metaCatalogProduct.attributes,
+    }).from(schema.metaCatalogProduct)
+      .where(scoped(schema.metaCatalogProduct.organizationId, organizationId)),
   ]);
 
   const byProviderId = new Map<string, DropiOrganizationOrder>();
@@ -458,7 +466,20 @@ export async function listDropiOrders(organizationId: string) {
     else unlinked.push(order);
   }
 
+  const localNameByDropiId = new Map<string, string>();
+  for (const product of catalogProducts) {
+    const productId = dropiProductIdFromAttributes(product.attributes);
+    if (productId && !localNameByDropiId.has(productId)) localNameByDropiId.set(productId, product.name);
+  }
+
   const orders = [...byProviderId.values(), ...unlinked]
+    .map((order) => ({
+      ...order,
+      items: order.items.map((item) => ({
+        ...item,
+        name: item.productId ? localNameByDropiId.get(item.productId) ?? item.name : item.name,
+      })),
+    }))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return { connected: connection?.status === "connected", orders };
 }
