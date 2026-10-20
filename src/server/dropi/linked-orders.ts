@@ -21,7 +21,7 @@ export type DropiLinkedOrder = {
   currency: string | null;
   items: { name: string; quantity: string | null; productId?: string | null }[];
   updatedAt: string;
-  source: "linked" | "vocero" | "dropi";
+  source: "linked" | "vocero";
 };
 
 function normalizedKey(value: string) {
@@ -556,7 +556,7 @@ export async function refreshDropiOrders(organizationId: string) {
     const orderId = providerOrderId(row);
     if (!orderId || seen.has(orderId)) continue;
     seen.add(orderId);
-    const summary = summaryFromOrder(orderId, row, "dropi");
+    const summary = summaryFromOrder(orderId, row, "linked");
     const customer = orderCustomer(row);
     const matches = contactIdsByPhone.get(normalizedPhone(customer.phone)) ?? [];
     const contactId = matches.length === 1 ? matches[0]! : null;
