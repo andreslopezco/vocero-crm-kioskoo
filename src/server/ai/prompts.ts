@@ -1,7 +1,7 @@
 import type { schema } from "@/lib/db";
 import type { CatalogSnapshot } from "@/server/catalog/service";
 import { CHANNEL_LABEL, type Channel } from "@/lib/channels";
-import { customerFacingCatalogAttributes, customerFacingCatalogDescription, type CatalogCategoryGroup } from "@/server/catalog/context";
+import { catalogProductPricing, customerFacingCatalogAttributes, customerFacingCatalogDescription, type CatalogCategoryGroup } from "@/server/catalog/context";
 
 type AgentProfile = typeof schema.agentProfile.$inferSelect;
 type KbEntry = typeof schema.kbEntry.$inferSelect;
@@ -91,7 +91,11 @@ export function buildAgentSystemPrompt(input: {
         JSON.stringify(catalog.products.filter((product) => product.availability === "in stock").map((product) => ({
           retailerId: product.retailerId,
           name: product.name,
-          price: product.price,
+          price: catalogProductPricing(product).currentPrice,
+          originalPrice: catalogProductPricing(product).isOnSale
+            ? catalogProductPricing(product).originalPrice
+            : null,
+          isOnSale: catalogProductPricing(product).isOnSale,
           currency: product.currency,
           brand: product.brand,
           availability: product.availability,
@@ -101,7 +105,7 @@ export function buildAgentSystemPrompt(input: {
         input.catalogCategories?.length
           ? `Categorías reales del catálogo: ${JSON.stringify(input.catalogCategories)}`
           : "El catálogo no publica categorías utilizables: no inventes ninguna.",
-        "Los retailerId son únicamente para la acción y availability es un dato interno: nunca los incluyas en el mensaje al cliente. Usa solo los datos comerciales de este catálogo; no inventes propiedades, precios o disponibilidad. No incluyas enlaces ni URLs en la respuesta: el sistema gestiona las imágenes de WhatsApp por separado.",
+        "Cuando isOnSale sea true, el precio actual es price y originalPrice es el precio anterior: presenta ambos como oferta (antes X, ahora Y) y nunca cotices originalPrice como precio vigente. Si isOnSale es false, usa únicamente price. Los retailerId son únicamente para la acción y availability es un dato interno: nunca los incluyas en el mensaje al cliente. Usa solo los datos comerciales de este catálogo; no inventes propiedades, precios o disponibilidad. No incluyas enlaces ni URLs en la respuesta: el sistema gestiona las imágenes de WhatsApp por separado.",
         `Si el cliente pide ver/comprar productos, usa send_products con retailerId exactos. ${input.channel === "whatsapp" ? "El servidor intenta tarjeta nativa y, si Meta no la admite, envía un resumen breve e imágenes disponibles." : "Este canal no usa tarjeta nativa: el servidor envía solo nombre y precio, sin enlaces internos del catálogo."}`,
         "En send_products, reply es solo una introducción corta y natural. No escribas allí nombres, precios, marcas, descripciones ni atributos: la tarjeta o el resumen los añade el servidor. Puedes omitir reply.",
         "Ante una petición abierta de catálogo, NO uses send_products todavía: presenta únicamente categorías publicadas y pregunta cuál interesa. Si no hay categorías, pregunta qué busca, para qué lo necesita o qué presupuesto tiene; nunca inventes categorías.",

@@ -182,9 +182,12 @@ export function catalogProductsIntro(
   const normalized = normalizedCatalogText(clean);
   const repeatsProduct = products.some((product) => {
     const name = normalizedCatalogText(product.name);
-    const price = normalizedCatalogText(product.price ?? "");
+    const pricing = catalogProductPricing(product);
+    const prices = [pricing.currentPrice, pricing.originalPrice]
+      .filter((price): price is string => Boolean(price))
+      .map(normalizedCatalogText);
     return (name.length > 0 && normalized.includes(name))
-      || (price.length > 0 && normalized.includes(price));
+      || prices.some((price) => price.length > 0 && normalized.includes(price));
   });
   return repeatsProduct ? fallback : clean;
 }
@@ -209,6 +212,44 @@ export function catalogContextForTurn(
   return { ...snapshot, products: ranked.slice(0, Math.max(0, limit)).map(({ product }) => product) };
 }
 
+type CatalogProduct = CatalogSnapshot["products"][number];
+
+function parseMetaDate(value: unknown): number | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const normalized = value.trim().replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
+  const timestamp = Date.parse(normalized);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function displayPrice(value: unknown, currency: string | null): string | null {
+  if ((typeof value !== "string" && typeof value !== "number") || String(value).trim() === "") return null;
+  const raw = String(value).trim();
+  return /\b[A-Z]{3}\s*$/u.test(raw) || !currency ? raw : `${raw} ${currency}`;
+}
+
+/** Meta conserva el precio normal en price y la oferta/fechas en attributes. */
+export function catalogProductPricing(
+  product: Pick<CatalogProduct, "price" | "currency" | "attributes">,
+  now = new Date()
+) {
+  const attributes = asAttributes(product.attributes);
+  const originalPrice = displayPrice(product.price, product.currency);
+  const salePrice = displayPrice(attributes.sale_price, product.currency);
+  const startsAt = parseMetaDate(attributes.sale_price_start_date);
+  const endsAt = parseMetaDate(attributes.sale_price_end_date);
+  const nowMs = now.getTime();
+  const activeSale = Boolean(salePrice)
+    && (startsAt === null || nowMs >= startsAt)
+    && (endsAt === null || nowMs <= endsAt);
+
+  return {
+    originalPrice,
+    salePrice: activeSale ? salePrice : null,
+    currentPrice: activeSale ? salePrice : originalPrice,
+    isOnSale: activeSale,
+  };
+}
+
 /** Formato verificable para el fallback de texto y canales sin tarjeta nativa. */
 export function catalogProductsText(
   products: CatalogSnapshot["products"],
@@ -217,16 +258,18 @@ export function catalogProductsText(
   mode: "summary" | "details" = "details"
 ): string {
   const lines = products.map((product) => {
-    const price = product.price
-      ? `${product.price}${product.currency ? ` ${product.currency}` : ""}`
-      : null;
+    const pricing = catalogProductPricing(product);
     if (mode === "summary") {
-      return `• ${product.name}${price ? ` — ${price}` : ""}`;
+      const priceText = pricing.isOnSale
+        ? `${pricing.currentPrice} (antes ${pricing.originalPrice})`
+        : pricing.currentPrice;
+      return `• ${product.name}${priceText ? ` — ${priceText}` : ""}`;
     }
     const attributes = customerFacingCatalogAttributes(product.attributes);
     const details = [
       product.brand ? `Marca: ${product.brand}` : null,
-      price ? `Precio: ${price}` : null,
+      pricing.currentPrice ? `Precio: ${pricing.currentPrice}${pricing.isOnSale ? " (en oferta)" : ""}` : null,
+      pricing.isOnSale && pricing.originalPrice ? `Antes: ${pricing.originalPrice}` : null,
       customerFacingCatalogDescription(product),
       ...Object.entries(attributes).map(([label, value]) => `${label}: ${value}`),
     ].filter((part): part is string => Boolean(part));
