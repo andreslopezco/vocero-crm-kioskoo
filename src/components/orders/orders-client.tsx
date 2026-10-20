@@ -467,7 +467,7 @@ export function OrdersClient() {
                                   return;
                                 }
                                 const rect = event.currentTarget.getBoundingClientRect();
-                                const top = Math.max(8, rect.top - estimatedHeight - 4);
+                                const top = rect.bottom + 4;
                                 setMenuPosition({ top, right: Math.max(8, window.innerWidth - rect.right) });
                                 setActionOrderId(id);
                               }}
