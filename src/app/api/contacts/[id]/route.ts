@@ -89,7 +89,11 @@ export const PATCH = withAuth(async (session, req: Request, ctx: Params) => {
   }
   if (body.data.phone !== undefined) {
     const rawPhone = body.data.phone?.trim() ?? "";
-    const phone = rawPhone ? phoneFromFicha({ phone: rawPhone }) : null;
+    const currentContact = await getContactById(session.organizationId, id);
+    const currentFicha = currentContact?.ficha && typeof currentContact.ficha === "object" && !Array.isArray(currentContact.ficha)
+      ? currentContact.ficha as Record<string, unknown>
+      : {};
+    const phone = rawPhone ? phoneFromFicha({ ...currentFicha, phone: rawPhone }) : null;
     if (rawPhone && !phone) return apiError(400, "invalid_phone", "Escribe un número de teléfono válido.");
     set.phone = phone;
   }
