@@ -370,48 +370,26 @@ function assertPhoneOwnership(contactPhone: string | null, orderData: unknown) {
   }
 }
 
-export async function listDropiOrdersForContact(organizationId: string, contactId: string): Promise<{ connected: boolean; orders: DropiLinkedOrder[] }> {
-  const connection = await getDropiConnection(organizationId);
-  const db = getDb();
-  const [linked, submissions] = await Promise.all([
-    db.select().from(schema.dropiOrderLink).where(scoped(
-      schema.dropiOrderLink.organizationId, organizationId, eq(schema.dropiOrderLink.contactId, contactId)
-    )).orderBy(desc(schema.dropiOrderLink.createdAt)),
-    db.select().from(schema.dropiOrderSubmission).where(scoped(
-      schema.dropiOrderSubmission.organizationId, organizationId, eq(schema.dropiOrderSubmission.contactId, contactId)
-    )).orderBy(desc(schema.dropiOrderSubmission.createdAt)),
-  ]);
-  const orders: DropiLinkedOrder[] = linked.map((row) => ({
-    ...row.snapshot as unknown as Omit<DropiLinkedOrder, "updatedAt" | "source">,
-    orderId: row.providerOrderId,
-    createdAt: textValue(findValue(row.snapshot, ["created_at", "createdAt"])) ?? null,
-    carrier: carrierFromOrder(row.snapshot),
-    updatedAt: row.updatedAt.toISOString(),
-    source: "linked",
-  }));
-  for (const row of submissions) {
-    // A local Vocero shopOrderId (e.g. "voc-…") is not a Dropi order ID.
-    // Only expose submissions as provider orders when Dropi returned a real ID.
-    if (!row.providerOrderId) continue;
-    const exists = orders.some((order) => order.orderId === row.providerOrderId);
-    if (exists) continue;
-    const productLines = Array.isArray(row.payload.products) ? row.payload.products : [];
-    orders.push({
-      orderId: row.providerOrderId,
-      status: row.providerStatus ?? row.status,
-      trackingCode: null, createdAt: row.createdAt.toISOString(), carrier: null, total: null, currency: null,
-      items: productLines.flatMap((item) => {
-        if (!item || typeof item !== "object" || Array.isArray(item)) return [];
-        const entry = item as Record<string, unknown>;
-        return [{ name: textValue(entry.name ?? entry.product_name ?? entry.id) ?? "Producto", quantity: textValue(entry.quantity ?? entry.qty) }];
-      }),
-      updatedAt: row.updatedAt.toISOString(),
-      source: "vocero",
-    });
-  }
-  return { connected: connection?.status === "connected", orders: orders.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) };
+export async function listDropiOrdersForContact(organizationId: string, contactId: string) {
+  const { connected, orders } = await listDropiOrders(organizationId);
+  return {
+    connected,
+    orders: orders
+      .filter((order) => order.contactId === contactId)
+      .map((order) => ({
+        orderId: order.providerOrderId ?? order.shopOrderId ?? order.orderId,
+        status: order.status,
+        trackingCode: order.trackingCode,
+        carrier: order.carrier,
+        createdAt: order.createdAt,
+        total: order.total,
+        currency: order.currency,
+        items: order.items.map((item) => ({ name: item.name, quantity: item.quantity })),
+        updatedAt: order.updatedAt,
+        source: order.source,
+      })),
+  };
 }
-
 export async function linkDropiOrderToContact(organizationId: string, contactId: string, orderIdInput: string) {
   const orderId = orderIdInput.trim();
   if (!orderId || orderId.length > 100) throw new DropiLinkError("Escribe un ID de pedido válido.", "invalid_order_id");
