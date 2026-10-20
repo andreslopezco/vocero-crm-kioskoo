@@ -433,7 +433,7 @@ export function CatalogPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="space-y-1.5 text-sm font-medium">
                 <FieldLabel required>Identificador / SKU</FieldLabel>
-                <Input required maxLength={100} value={form.retailerId} disabled={editor.mode === "edit" || saving} onChange={(event) => setForm({ ...form, retailerId: event.target.value })} placeholder="Identificador / SKU" />
+                <Input required maxLength={100} value={form.retailerId} disabled={saving} onChange={(event) => setForm({ ...form, retailerId: event.target.value })} placeholder="Identificador / SKU" />
                 <span className="block text-xs font-normal text-text-3">No se puede cambiar después de crear el producto.</span>
               </label>
               <label className="space-y-1.5 text-sm font-medium">
