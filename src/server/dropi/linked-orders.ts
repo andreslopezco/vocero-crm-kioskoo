@@ -465,7 +465,7 @@ export type DropiOrganizationOrder = {
   currency: string | null;
   items: { name: string; quantity: string | null; productId?: string | null }[];
   updatedAt: string;
-  source: "linked" | "vocero";
+  source: "linked" | "vocero" | "dropi";
 };
 
 function organizationOrderItems(value: unknown) {
