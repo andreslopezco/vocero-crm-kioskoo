@@ -21,7 +21,7 @@ export async function dropiPromptContext(organizationId: string, query: string) 
   const localCatalog = await getCatalogSnapshot(organizationId);
   const catalogProducts = (localCatalog?.products ?? []).flatMap((product) => {
     const dropiProductId = dropiProductIdFromAttributes(product.attributes);
-    return dropiProductId ? [{ retailerId: product.retailerId, name: product.name, dropiProductId }] : [];
+    return dropiProductId ? [{ retailerId: product.retailerId, name: product.name, dropiProductId, price: product.price, currency: product.currency }] : [];
   });
   const productTool = connection.bundle.tools?.find((tool) => tool.name === "list_products");
   const productSchema = productTool?.inputSchema as { properties?: Record<string, unknown>; required?: string[] } | undefined;
