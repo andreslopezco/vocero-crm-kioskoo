@@ -1,6 +1,6 @@
 import { apiError, withAuth } from "@/lib/api";
 import { dropiOrdersEnabled, dropiDisabledResponse } from "@/server/dropi/flag";
-import { listDropiOrders, refreshDropiOrders } from "@/server/dropi/linked-orders";
+import { DropiLinkError, listDropiOrders, refreshDropiOrders } from "@/server/dropi/linked-orders";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +20,9 @@ export const POST = withAuth(async (session) => {
     return Response.json(await refreshDropiOrders(session.organizationId));
   } catch (error) {
     console.error("[orders] refresh failed", error instanceof Error ? error.message : "unknown");
-    return apiError(502, "orders_refresh_failed", error instanceof Error ? error.message : "No se pudieron actualizar los pedidos.");
+    const message = error instanceof DropiLinkError
+      ? error.message
+      : "Dropi no pudo actualizar los pedidos. Inténtalo de nuevo más tarde.";
+    return apiError(502, "orders_refresh_failed", message);
   }
 });
