@@ -439,6 +439,69 @@ export function ContactPanel({
           </section>
         )}
 
+        {dropiPanelAvailable && (
+          <section className="border-b p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-soft text-brand-text">
+                  <PackageCheck className="h-4 w-4" strokeWidth={1.7} />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold">Pedidos Dropi</p>
+                  <p className="text-[11px] text-text-3">{dropiOrders.length} vinculados a este contacto</p>
+                </div>
+              </div>
+              <span className={cn("rounded-full px-2 py-1 text-[10px] font-medium", dropiConnected ? "bg-success-tint text-success-text" : "bg-warning-tint text-warning-text")}>
+                {dropiConnected ? "Conectado" : "Sin conexión"}
+              </span>
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-text-3">
+              Vincula un pedido existente por su ID. La IA podrá usar su estado y guía como contexto.
+            </p>
+            {dropiConnected ? (
+              <form className="mt-3 flex gap-2" onSubmit={(event) => { event.preventDefault(); void linkDropiOrder(); }}>
+                <input
+                  aria-label="ID del pedido en Dropi"
+                  placeholder="ID del pedido en Dropi"
+                  value={dropiOrderId}
+                  onChange={(event) => setDropiOrderId(event.target.value)}
+                  className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  maxLength={100}
+                />
+                <Button size="sm" type="submit" disabled={dropiLoading || !dropiOrderId.trim()} className="shrink-0">
+                  {dropiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" strokeWidth={1.8} />}
+                  <span className="ml-1">Vincular</span>
+                </Button>
+              </form>
+            ) : (
+              <Link href="/settings/dropi" className="mt-2 inline-flex text-xs font-medium text-brand-text underline underline-offset-2">Conectar Dropi →</Link>
+            )}
+            {dropiError && <p role="alert" className="mt-2 text-xs text-danger-text">{dropiError}</p>}
+            {dropiNotice && <p role="status" className="mt-2 text-xs text-success-text">{dropiNotice}</p>}
+            {dropiOrders.length > 0 && (
+              <ul className="mt-3 space-y-2">
+                {dropiOrders.map((order) => (
+                  <li key={order.orderId} className="rounded-md border bg-subtle p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold">Pedido {order.orderId}</p>
+                        <p className="mt-0.5 text-[11px] text-text-2">{order.status ?? "Estado no disponible"}</p>
+                      </div>
+                      {order.source === "linked" && (
+                        <button type="button" aria-label={`Desvincular pedido ${order.orderId}`} onClick={() => void unlinkDropiOrder(order.orderId)} className="rounded p-1 text-text-3 hover:bg-accent hover:text-danger-text">
+                          <Unlink className="h-3.5 w-3.5" strokeWidth={1.7} />
+                        </button>
+                      )}
+                    </div>
+                    {order.items.length > 0 && <p className="mt-2 line-clamp-2 text-[11px] text-text-3">{order.items.map((item) => `${item.name}${item.quantity ? ` × ${item.quantity}` : ""}`).join(", ")}</p>}
+                    {order.trackingCode && <p className="mt-1 text-[11px] text-text-2">Guía: <span className="font-medium">{order.trackingCode}</span></p>}
+                    {order.total && <p className="mt-1 text-[11px] text-text-2">Total: {order.total} {order.currency ?? ""}</p>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
         {/* Ficha: lo que se SABE del lead. Va antes de Notas —lo que alguien
             OPINA— porque es lo que se consulta a mitad de una conversación. */}
         <FichaPanel ficha={ficha} onSave={saveFicha} />
