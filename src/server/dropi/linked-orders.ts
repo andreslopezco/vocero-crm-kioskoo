@@ -253,8 +253,9 @@ function decodeOrderPage(result: {
   for (const candidate of candidates) {
     let parsed: unknown = candidate;
     if (typeof parsed === "string") {
-      try { parsed = JSON.parse(parsed) as unknown; }
-      catch { parsed = parseDropiText(parsed) ?? parsed; }
+      const text = parsed;
+      try { parsed = JSON.parse(text) as unknown; }
+      catch { parsed = parseDropiText(text) ?? text; }
     }
     if (typeof parsed === "string") {
       try { parsed = JSON.parse(parsed) as unknown; } catch { continue; }
