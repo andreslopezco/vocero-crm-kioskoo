@@ -124,7 +124,9 @@ function parseDropiText(text: string): unknown | undefined {
     const tableHeader = line.match(/^\s*([\w-]+)\[\d+\]\{([^}]+)\}:\s*$/);
     if (tableHeader) {
       const key = tableHeader[1];
-      itemHeaders = tableHeader[2].split(",").map((part) => part.trim());
+      const columns = tableHeader[2];
+      if (!key || !columns) continue;
+      itemHeaders = columns.split(",").map((part) => part.trim());
       activeArray = [];
       root[key] = activeArray;
       activeObject = null;
