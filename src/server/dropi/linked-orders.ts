@@ -388,7 +388,7 @@ function organizationOrderItems(value: unknown) {
 function productSignature(items: Array<{ productId?: string | null; quantity: string | null }>): string | null {
   const lines = items.flatMap((item) => {
     const productId = item.productId?.trim();
-    if (!productId || !/^[1-9]\\d{0,23}$/.test(productId)) return [];
+    if (!productId || !/^[1-9]\d{0,23}$/.test(productId)) return [];
     return [`${productId}:${item.quantity?.trim() || "1"}`];
   }).sort();
   return lines.length ? lines.join("|") : null;
@@ -416,7 +416,7 @@ export async function refreshDropiOrders(organizationId: string) {
     }).from(schema.dropiOrderLink)
       .where(scoped(schema.dropiOrderLink.organizationId, organizationId))
       .orderBy(desc(schema.dropiOrderLink.updatedAt))
-      .limit(30),
+      .limit(10),
     db.select({
       id: schema.dropiOrderSubmission.id,
       providerOrderId: schema.dropiOrderSubmission.providerOrderId,
@@ -502,7 +502,7 @@ export async function refreshDropiOrders(organizationId: string) {
     reconciledOrders += 1;
   }
 
-  return { refreshedOrders: refreshed.length, reconciledOrders };
+  return { refreshedOrders: refreshed.length, reconciledOrders, failedOrders: links.length - refreshed.length };
 }
 
 /** Lista pedidos creados desde Vocero y pedidos de Dropi vinculados, dentro de la organización. */
