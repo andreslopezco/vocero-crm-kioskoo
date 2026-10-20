@@ -386,7 +386,7 @@ export async function listDropiOrdersForContact(organizationId: string, contactI
         currency: order.currency,
         items: order.items.map((item) => ({ name: item.name, quantity: item.quantity })),
         updatedAt: order.updatedAt,
-        source: order.source === "vocero" ? "vocero" : "linked",
+        source: order.source === "vocero" ? "vocero" as const : "linked" as const,
         canUnlink: order.source === "linked",
       })),
   };
