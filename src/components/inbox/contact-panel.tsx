@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Sparkles,
   Trash2,
+  Truck,
   UserRound,
 } from "lucide-react";
 import {
@@ -33,6 +34,7 @@ import type {
 import { cn, formatPhone } from "@/lib/utils";
 import { AnuncioOrigen } from "@/components/anuncio-origen";
 import { ContactAvatar } from "@/components/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,10 +43,62 @@ import { DeleteConversationDialog } from "./delete-conversation-dialog";
 
 type DropiOrderPanelItem = {
   orderId: string; status: string | null; trackingCode: string | null;
-  total: string | null; currency: string | null;
+  carrier: string | null; total: string | null; currency: string | null;
   items: { name: string; quantity: string | null }[];
-  updatedAt: string; source: "linked" | "vocero";
+  updatedAt: string; source: "linked" | "vocero" | "dropi";
 };
+
+function dropiStatusText(value: string | null) {
+  const status = (value ?? "").trim().toLowerCase().replace(/[ -]+/g, "_");
+  const labels: Record<string, string> = {
+    pending_confirmation: "Pendiente confirmación",
+    pendiente_confirmacion: "Pendiente confirmación",
+    delivered: "Entregado",
+    entregado: "Entregado",
+    cancelled: "Cancelado",
+    canceled: "Cancelado",
+    cancelado: "Cancelado",
+    rejected: "Rechazado",
+    rechazado: "Rechazado",
+    returned: "Devolución",
+    devolucion: "Devolución",
+  };
+  return labels[status] ?? (value?.trim() || "Estado no disponible");
+}
+
+function dropiStatusVariant(value: string | null): "success" | "warning" | "destructive" | "secondary" {
+  const status = (value ?? "").trim().toLowerCase();
+  if (/delivered|entregado|complete/.test(status)) return "success";
+  if (/cancel|cancelado|reject|rechaz|devol|return|failed|error/.test(status)) return "destructive";
+  if (/pending[ _-]*confirm|pendiente.*confirm|needs_review|review/.test(status)) return "warning";
+  return "secondary";
+}
+
+function dropiMoney(value: string | null, currency: string | null) {
+  if (!value) return null;
+  const raw = value.trim().replace(/[^\d,.-]/g, "");
+  if (!raw) return null;
+  const lastComma = raw.lastIndexOf(",");
+  const lastDot = raw.lastIndexOf(".");
+  const decimalIndex = Math.max(lastComma, lastDot);
+  let normalized = raw;
+  if (lastComma >= 0 && lastDot >= 0) {
+    const decimalDigits = raw.length - decimalIndex - 1;
+    normalized = decimalDigits > 0 && decimalDigits <= 2
+      ? raw.slice(0, decimalIndex).replace(/[,.]/g, "") + "." + raw.slice(decimalIndex + 1)
+      : raw.replace(/[,.]/g, "");
+  } else if (decimalIndex >= 0) {
+    const decimalDigits = raw.length - decimalIndex - 1;
+    normalized = decimalDigits > 0 && decimalDigits <= 2
+      ? raw.slice(0, decimalIndex).replace(/[,.]/g, "") + "." + raw.slice(decimalIndex + 1)
+      : raw.replace(/[,.]/g, "");
+  }
+  const amount = Number(normalized);
+  if (!Number.isFinite(amount)) return value;
+  const formatted = new Intl.NumberFormat("es-CO", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount);
+  const code = (currency ?? "COP").toUpperCase();
+  return code === "COP" ? `${formatted} COP` : `${formatted} ${code}`;
+}
 const HANDOFF_LABELS: Record<string, string> = {
   cliente: "El cliente pidió un humano",
   modelo: "El agente decidió escalar",
@@ -524,8 +578,13 @@ export function ContactPanel({
                   <li key={order.orderId} className="rounded-md border bg-subtle p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-xs font-semibold">Pedido {order.orderId}</p>
-                        <p className="mt-0.5 text-[11px] text-text-2">{order.status ?? "Estado no disponible"}</p>
+                        <p className="truncate text-xs font-semibold">ID pedido {order.orderId}</p>
+                        <Badge
+                          className="mt-1 max-w-full truncate whitespace-nowrap uppercase px-1 py-0 text-[9px] leading-3"
+                          variant={dropiStatusVariant(order.status)}
+                        >
+                          {dropiStatusText(order.status)}
+                        </Badge>
                       </div>
                       {order.source === "linked" && (
                         <button type="button" aria-label={`Desvincular pedido ${order.orderId}`} onClick={() => void unlinkDropiOrder(order.orderId)} className="rounded p-1 text-text-3 hover:bg-accent hover:text-danger-text">
@@ -534,8 +593,17 @@ export function ContactPanel({
                       )}
                     </div>
                     {order.items.length > 0 && <p className="mt-2 line-clamp-2 text-[11px] text-text-3">{order.items.map((item) => `${item.name}${item.quantity ? ` × ${item.quantity}` : ""}`).join(", ")}</p>}
-                    {order.trackingCode && <p className="mt-1 text-[11px] text-text-2">Guía: <span className="font-medium">{order.trackingCode}</span></p>}
-                    {order.total && <p className="mt-1 text-[11px] text-text-2">Total: {order.total} {order.currency ?? ""}</p>}
+                    {(order.carrier || order.trackingCode) && (
+                      <p className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-text-2">
+                        <Truck className="h-3 w-3 shrink-0" strokeWidth={1.7} />
+                        <span className="min-w-0 truncate" title={[order.carrier, order.trackingCode].filter(Boolean).join(" · ")}>
+                          {order.carrier && <span className="font-medium">{order.carrier}</span>}
+                          {order.carrier && order.trackingCode && " · "}
+                          {order.trackingCode && <span className="font-medium">{order.trackingCode}</span>}
+                        </span>
+                      </p>
+                    )}
+                    {order.total && <p className="mt-1 text-[11px] text-text-2">Total: <span className="font-medium">{dropiMoney(order.total, order.currency)}</span></p>}
                   </li>
                 ))}
               </ul>
