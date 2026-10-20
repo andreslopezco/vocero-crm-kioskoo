@@ -500,7 +500,7 @@ export function OrdersClient() {
 
         <Card>
           <CardHeader className="gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div><CardTitle>Todos los pedidos <span className="ml-2 text-sm font-medium text-text-3">{loading ? "" : `· ${ordersForSummary.length} registrados`}</span></CardTitle><CardDescription>Los pedidos quedan asociados a su contacto y se ordenan por actividad reciente.</CardDescription></div>
+            <div><CardTitle>Todos los pedidos</CardTitle><CardDescription>Los pedidos quedan asociados a su contacto y se ordenan por actividad reciente.</CardDescription></div>
             <div className="relative w-full sm:max-w-xs">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
               <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar pedido, contacto o producto" className="pl-9" aria-label="Buscar pedidos" />
