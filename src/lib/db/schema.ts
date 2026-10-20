@@ -1324,6 +1324,27 @@ export const dropiOrderSubmission = pgTable(
 );
 
 
+/** Snapshot organizacional de los pedidos traídos desde Dropi. */
+export const dropiOrderSync = pgTable(
+  "dropi_order_sync",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    orderId: text("order_id").notNull(),
+    contactId: text("contact_id").references(() => contact.id, { onDelete: "set null" }),
+    snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+    ignored: boolean("ignored").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("dropi_order_sync_org_order_uq").on(t.organizationId, t.orderId),
+    index("dropi_order_sync_org_updated_idx").on(t.organizationId, t.updatedAt),
+  ]
+);
+
 /** Órdenes existentes de Dropi vinculadas manualmente a un contacto. */
 export const dropiOrderLink = pgTable(
   "dropi_order_link",
