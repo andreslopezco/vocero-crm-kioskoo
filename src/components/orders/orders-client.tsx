@@ -97,17 +97,20 @@ export function OrdersClient() {
       if (quiet) {
         const refreshResponse = await fetch("/api/orders", { method: "POST", cache: "no-store" });
         const refreshBody = await refreshResponse.json().catch(() => null) as
-          | { refreshedOrders?: number; reconciledOrders?: number; error?: { message?: string } }
+          | { refreshedOrders?: number; reconciledOrders?: number; failedOrders?: number; error?: { message?: string } }
           | null;
         if (!refreshResponse.ok || !refreshBody) {
           throw new Error(refreshBody?.error?.message ?? "No se pudieron actualizar los pedidos.");
         }
         const refreshed = refreshBody.refreshedOrders ?? 0;
         const reconciled = refreshBody.reconciledOrders ?? 0;
+        const failed = refreshBody.failedOrders ?? 0;
         setNotice(
           refreshed || reconciled
-            ? `Actualización lista: ${refreshed} pedido(s) consultado(s) en Dropi y ${reconciled} solicitud(es) de Vocero vinculada(s).`
-            : "Actualización lista. No hubo pedidos vinculados que requirieran sincronización."
+            ? `Actualización lista: ${refreshed} pedido(s) consultado(s) en Dropi y ${reconciled} solicitud(es) de Vocero vinculada(s).${failed ? ` ${failed} pedido(s) no se pudieron actualizar.` : ""}`
+            : failed
+              ? `No se pudieron actualizar ${failed} pedido(s) en Dropi. Revisa la conexión e inténtalo de nuevo.`
+              : "Actualización lista. No había pedidos vinculados que requirieran sincronización."
         );
       }
       const response = await fetch("/api/orders", { cache: "no-store" });
