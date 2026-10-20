@@ -5,7 +5,7 @@ import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
 import { getDropiConnection } from "./credentials";
 import { getCatalogSnapshot } from "@/server/catalog/service";
-import { dropiOrderContainsOnlyMappedProducts, dropiOrderProductIds, dropiProductIdFromAttributes } from "./product-mapping";
+import { LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE, dropiOrderContainsOnlyMappedProducts, dropiOrderProductIds, dropiProductIdFromAttributes } from "./product-mapping";
 import { callDropiTool, listDropiTools } from "./mcp-client";
 
 const EXPECTED_STATUS = "PENDIENTE CONFIRMACION";
