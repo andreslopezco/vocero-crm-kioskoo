@@ -378,7 +378,7 @@ export function OrdersClient() {
                         </td>
                         <td className="px-3 py-3">
                           <Badge
-                            className="max-w-full truncate whitespace-nowrap px-1 py-0 text-[8px] leading-3"
+                            className="max-w-full truncate whitespace-nowrap px-1 py-0 text-[9px] leading-3"
                             title={statusText(order.status)}
                             variant={statusVariant(order.status)}
                           >
