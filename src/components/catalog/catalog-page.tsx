@@ -15,6 +15,8 @@ type Product = {
   description: string | null;
   availability: string | null;
   price: string | null;
+  salePrice: string | null;
+  isOnSale: boolean;
   currency: string | null;
   brand: string | null;
   imageUrl: string | null;
@@ -342,8 +344,19 @@ export function CatalogPage() {
                             </div>
                           </td>
                           <td className="px-3 py-3">{product.brand ?? <span className="text-text-3">—</span>}</td>
-                          <td className="whitespace-nowrap px-3 py-3 font-semibold">
-                            {product.price ? `${product.price}${product.currency ? ` ${product.currency}` : ""}` : <span className="font-normal text-text-3">—</span>}
+                          <td className="whitespace-nowrap px-3 py-3">
+                            {product.isOnSale && product.salePrice ? (
+                              <div className="flex flex-col items-start leading-tight">
+                                <span className="text-xs font-normal text-red-600 line-through">
+                                  {product.price ? `${product.price}${product.currency ? ` ${product.currency}` : ""}` : "—"}
+                                </span>
+                                <span className="font-semibold">{product.salePrice}</span>
+                              </div>
+                            ) : (
+                              <span className="font-semibold">
+                                {product.price ? `${product.price}${product.currency ? ` ${product.currency}` : ""}` : <span className="font-normal text-text-3">—</span>}
+                              </span>
+                            )}
                           </td>
                           <td className="px-3 py-3">
                             <Badge variant={product.availability === "in stock" ? "success" : "secondary"}>
