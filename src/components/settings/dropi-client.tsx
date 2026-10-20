@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, CircleAlert, LoaderCircle, PlugZap, Unplug } from "lucide-react";
+import { CheckCircle2, CircleAlert, LoaderCircle, PlugZap, RefreshCw, Unplug } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 
 type View = {
   connected: boolean;
@@ -57,40 +61,160 @@ export function DropiSettingsClient({ canConfigure }: { canConfigure: boolean })
 
   async function disconnect() {
     if (!window.confirm("¿Desconectar Dropi de esta organización?")) return;
-    setBusy(true);
-    try { await fetch("/api/dropi/settings", { method: "DELETE" }); await refresh(); setMessage("Dropi desconectado."); }
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch("/api/dropi/settings", { method: "DELETE" });
+      if (!response.ok) throw new Error("No se pudo desconectar Dropi.");
+      await refresh();
+      setMessage("Dropi desconectado.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo desconectar Dropi."); }
     finally { setBusy(false); }
   }
 
-  if (!view) return <div className="p-6 text-sm text-text-2">Cargando conexión con Dropi…</div>;
-  return <div className="mx-auto max-w-2xl space-y-6">
-    <div>
-      <p className="kicker">Integraciones</p>
-      <h1 className="mt-1 text-xl font-bold">Pedidos en Dropi</h1>
-      <p className="mt-2 text-sm text-text-2">El agente podrá preparar pedidos con los datos confirmados durante la conversación y dejarlos para revisión humana.</p>
+  if (!view) {
+    return <div className="mx-auto max-w-3xl space-y-4 p-1" aria-live="polite">
+      <div className="h-5 w-28 animate-pulse rounded bg-subtle" />
+      <div className="h-9 w-64 animate-pulse rounded bg-subtle" />
+      <div className="h-48 animate-pulse rounded-lg border bg-card" />
+    </div>;
+  }
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-6">
+      <header>
+        <p className="kicker">Integraciones</p>
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Pedidos en Dropi</h1>
+          <Badge variant={view.connected ? "success" : "secondary"}>
+            {view.connected ? "Conectado" : "Sin conectar"}
+          </Badge>
+        </div>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-text-2">
+          El agente puede preparar pedidos con los datos recopilados en la conversación y dejarlos listos para revisión humana en Dropi.
+        </p>
+      </header>
+
+      {!view.config.ready && (
+        <div className="flex items-start gap-3 rounded-md border border-warning-soft bg-warning-tint p-4 text-sm text-warning-text" role="status">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>Falta completar la configuración de la integración en el servidor.</p>
+        </div>
+      )}
+
+      <Card>
+        <CardHeader className="flex-row items-start justify-between gap-4 border-b border-border-strong">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-brand-tint text-brand-text">
+              {view.connected ? <CheckCircle2 className="h-5 w-5" /> : <PlugZap className="h-5 w-5" />}
+            </span>
+            <div className="space-y-1">
+              <CardTitle>{view.connected ? "Cuenta de Dropi conectada" : "Conecta tu cuenta de Dropi"}</CardTitle>
+              <CardDescription>
+                {view.connected
+                  ? "Configura cómo se preparan los pedidos y revisa la conexión con el proveedor."
+                  : "Autoriza el acceso para que Vocero pueda consultar y preparar pedidos."}
+              </CardDescription>
+            </div>
+          </div>
+          {view.connected && <Badge variant="success">Activa</Badge>}
+        </CardHeader>
+
+        <CardContent className="space-y-5 pt-5">
+          {view.connected ? (
+            <>
+              <div className="grid gap-4 sm:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] sm:items-start">
+                <div className="space-y-2">
+                  <Label htmlFor="dropi-rate-type">Tipo de recaudo</Label>
+                  <select
+                    id="dropi-rate-type"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={rateType}
+                    onChange={(event) => setRateType(event.target.value as typeof rateType)}
+                    disabled={!canConfigure || busy}
+                  >
+                    <option value="">Seleccionar…</option>
+                    <option value="CON RECAUDO">Con recaudo</option>
+                    <option value="SIN RECAUDO">Sin recaudo</option>
+                  </select>
+                  <p className="text-xs leading-5 text-text-3">Se incluirá al crear el pedido para revisión.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Herramientas disponibles</Label>
+                  <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-md border bg-subtle px-3 py-2">
+                    {view.tools.length
+                      ? view.tools.map((tool) => <Badge key={tool} variant="secondary">{tool}</Badge>)
+                      : <span className="text-sm text-text-3">Pendiente de lectura</span>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-md border border-border-strong p-4">
+                <label className="flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={view.orderCreationEnabled}
+                    disabled={!canConfigure || busy}
+                    onChange={(event) => setView({ ...view, orderCreationEnabled: event.target.checked })}
+                    className="mt-1 h-4 w-4 accent-primary disabled:cursor-not-allowed"
+                  />
+                  <span className="space-y-1">
+                    <span className="block text-sm font-semibold">Permitir crear pedidos desde el agente</span>
+                    <span className="block text-sm leading-5 text-text-2">
+                      El pedido queda pendiente para revisión humana. Vocero no le confirmará la compra al cliente; el equipo deberá validar los datos y la disponibilidad directamente en Dropi.
+                    </span>
+                  </span>
+                </label>
+              </div>
+
+              {view.lastError && (
+                <div className="flex items-start gap-2 rounded-md border border-danger-soft bg-danger-tint p-3 text-sm text-danger-text" role="alert">
+                  <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  <p>{view.lastError}</p>
+                </div>
+              )}
+
+              {canConfigure && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button onClick={() => void save()} disabled={busy || !rateType}>
+                    {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                    Guardar ajustes
+                  </Button>
+                  <Button variant="outline" onClick={() => void refresh()} disabled={busy}>
+                    <RefreshCw className="h-4 w-4" /> Actualizar estado
+                  </Button>
+                  <Button variant="ghost" onClick={() => void disconnect()} disabled={busy} className="text-destructive hover:text-destructive">
+                    <Unplug className="h-4 w-4" /> Desconectar
+                  </Button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="space-y-4">
+              <p className="max-w-xl text-sm leading-6 text-text-2">
+                Al conectar Dropi podrás vincular pedidos existentes y usar sus estados y guías como contexto para el equipo.
+              </p>
+              {canConfigure ? (
+                <Button onClick={() => void connect()} disabled={busy || !view.config.ready}>
+                  {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <PlugZap className="h-4 w-4" />}
+                  Conectar cuenta Dropi
+                </Button>
+              ) : (
+                <p className="text-sm text-text-3">Pídele a una persona administradora que conecte la cuenta.</p>
+              )}
+            </div>
+          )}
+
+          {message && (
+            <p className="rounded-md border bg-subtle px-3 py-2 text-sm text-text-2" role="status" aria-live="polite">
+              {message}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <p className="text-xs leading-5 text-text-3">
+        La creación en Dropi no significa que el pedido esté confirmado. El equipo debe revisar la disponibilidad y los datos antes de confirmar al cliente.
+      </p>
     </div>
-    {!view.config.ready && <div className="rounded-md border border-warning/30 bg-warning/5 p-4 text-sm">Falta completar la configuración de la integración en el servidor.</div>}
-    <section className="rounded-lg border bg-card p-5 space-y-4">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        {view.connected ? <CheckCircle2 className="h-4 w-4 text-success" /> : <CircleAlert className="h-4 w-4 text-text-2" />}
-        {view.connected ? "Cuenta de Dropi conectada" : "Cuenta de Dropi sin conectar"}
-      </div>
-      {view.connected ? <>
-        <label className="block space-y-1 text-sm"><span className="font-medium">Tipo de recaudo</span>
-          <select className="w-full rounded-md border bg-background px-3 py-2" value={rateType} onChange={(e) => setRateType(e.target.value as typeof rateType)} disabled={!canConfigure || busy}>
-            <option value="">Seleccionar…</option><option value="CON RECAUDO">Con recaudo</option><option value="SIN RECAUDO">Sin recaudo</option>
-          </select>
-        </label>
-        <p className="text-xs text-text-2">Herramientas disponibles: {view.tools.length ? view.tools.join(", ") : "pendiente de lectura"}</p>
-        {view.lastError && <p className="text-sm text-destructive">{view.lastError}</p>}
-        <label className="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/5 p-3 text-sm">
-          <input type="checkbox" checked={view.orderCreationEnabled} disabled={!canConfigure || busy} onChange={(e) => setView({ ...view, orderCreationEnabled: e.target.checked })} className="mt-0.5" />
-          <span><strong>Permitir crear pedidos desde el agente</strong><br/>Actívalo solo después de verificar que Dropi los deja pendientes de confirmación y no genera despacho ni notificación al cliente. Vocero no confirmará el pedido al comprador.</span>
-        </label>
-        {canConfigure && <div className="flex flex-wrap gap-2"><button onClick={() => void save()} disabled={busy || !rateType} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">{busy ? "Guardando…" : "Guardar ajustes"}</button><button onClick={() => void disconnect()} disabled={busy} className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm"><Unplug className="h-4 w-4"/> Desconectar</button></div>}
-      </> : canConfigure && <button onClick={() => void connect()} disabled={busy || !view.config.ready} className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">{busy ? <LoaderCircle className="h-4 w-4 animate-spin"/> : <PlugZap className="h-4 w-4"/>} Conectar cuenta Dropi</button>}
-      {message && <p className="text-sm text-text-2">{message}</p>}
-    </section>
-    <p className="text-xs text-text-2">En caso de creación, Vocero no dirá que el pedido está confirmado; el equipo deberá verificar los datos y la disponibilidad en Dropi.</p>
-  </div>;
+  );
 }
