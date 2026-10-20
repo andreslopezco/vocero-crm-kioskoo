@@ -90,14 +90,24 @@ export class DropiOAuthProvider implements OAuthClientProvider {
     if (scope === "all" || scope === "client") this.flowBundle.clientInformationByIssuer = {};
     if (scope === "all" || scope === "tokens") this.flowBundle.tokensByIssuer = {};
     if (scope === "all" || scope === "discovery") this.flowBundle.discoveryState = undefined;
-    if (scope === "all" || scope === "verifier") await updateDropiFlowData(this.flowId, this.organizationId, (flow) => { delete flow.codeVerifier; });
+    // The verifier only exists for an in-progress authorization flow.
+    if (this.flowId && (scope === "all" || scope === "verifier")) {
+      await updateDropiFlowData(this.flowId, this.organizationId, (flow) => { delete flow.codeVerifier; });
+    }
     await this.saveBundle();
   }
   async persistToOrganization() {
     await replaceDropiOAuthBundle(this.organizationId, this.flowBundle);
   }
   private async saveBundle() {
-    await saveDropiFlowBundle(this.flowId, this.organizationId, this.flowBundle);
+    // Authorization callbacks persist into the short-lived flow until completion.
+    // Normal MCP calls use an empty flowId; refreshed/rotated OAuth credentials
+    // must then be written back to the organization's durable credential bundle.
+    if (this.flowId) {
+      await saveDropiFlowBundle(this.flowId, this.organizationId, this.flowBundle);
+    } else {
+      await replaceDropiOAuthBundle(this.organizationId, this.flowBundle);
+    }
   }
 }
 
