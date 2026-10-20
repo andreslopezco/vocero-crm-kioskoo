@@ -5,6 +5,10 @@ import Link from "next/link";
 import {
   AlertTriangle,
   Cable,
+  Link2,
+  Loader2,
+  PackageCheck,
+  Unlink,
   Check,
   ChevronRight,
   Sparkles,
@@ -33,6 +37,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { FichaPanel } from "@/components/ficha-panel";
 import { DeleteConversationDialog } from "./delete-conversation-dialog";
 
+type DropiOrderPanelItem = {
+  orderId: string; status: string | null; trackingCode: string | null;
+  total: string | null; currency: string | null;
+  items: { name: string; quantity: string | null }[];
+  updatedAt: string; source: "linked" | "vocero";
+};
 const HANDOFF_LABELS: Record<string, string> = {
   cliente: "El cliente pidió un humano",
   modelo: "El agente decidió escalar",
@@ -73,6 +83,13 @@ export function ContactPanel({
   // toggle "Respondiendo" mentiría cuando el agente aún no se ha
   // configurado/encendido, y pediría la clave de IA aunque conteste Nea.
   const [brain, setBrain] = useState<BrainStatusDto | null>(null);
+  const [dropiPanelAvailable, setDropiPanelAvailable] = useState(false);
+  const [dropiConnected, setDropiConnected] = useState(false);
+  const [dropiOrders, setDropiOrders] = useState<DropiOrderPanelItem[]>([]);
+  const [dropiOrderId, setDropiOrderId] = useState("");
+  const [dropiLoading, setDropiLoading] = useState(false);
+  const [dropiError, setDropiError] = useState("");
+  const [dropiNotice, setDropiNotice] = useState("");
 
   const contactId = conversation.contact.id;
 
@@ -94,9 +111,22 @@ export function ContactPanel({
     if (b) setBrain(b);
   }, []);
 
+  const loadDropiOrders = useCallback(async () => {
+    const response = await fetch(`/api/contacts/${contactId}/dropi-orders`).catch(() => null);
+    if (!response?.ok) {
+      setDropiPanelAvailable(false);
+      return;
+    }
+    const data = await response.json().catch(() => null);
+    if (!data) return;
+    setDropiPanelAvailable(true);
+    setDropiConnected(Boolean(data.connected));
+    setDropiOrders(Array.isArray(data.orders) ? data.orders : []);
+  }, [contactId]);
   // Carga inicial (incluye notas): se re-ejecuta al cambiar de contacto.
   const refetch = useCallback(async () => {
     void loadBrain();
+    void loadDropiOrders();
     const [detail, stagesRes] = await Promise.all([
       fetch(`/api/contacts/${contactId}`).then((r) => (r.ok ? r.json() : null)),
       fetch("/api/pipeline/stages").then((r) => (r.ok ? r.json() : null)),
@@ -110,12 +140,13 @@ export function ContactPanel({
     }
     if (stagesRes) setStages(stagesRes.stages);
     setNotesLoaded(true);
-  }, [contactId, loadBrain]);
+  }, [contactId, loadBrain, loadDropiOrders]);
 
   // Refetch en vivo (etapa/lead + quién responde) SIN tocar las notas, para
   // no pisar lo que el operador esté escribiendo. Lo dispara el SSE.
   const refreshLive = useCallback(async () => {
     void loadBrain();
+    void loadDropiOrders();
     const detail = await fetch(`/api/contacts/${contactId}`)
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
@@ -130,7 +161,7 @@ export function ContactPanel({
       // refetch en vivo es lo que la hace aparecer sin recargar.
       setAnuncio(detail.anuncio ?? null);
     }
-  }, [contactId, loadBrain]);
+  }, [contactId, loadBrain, loadDropiOrders]);
 
   useEffect(() => {
     setNotesLoaded(false);
@@ -183,6 +214,34 @@ export function ContactPanel({
     setSavingNotes(false);
   }
 
+  async function linkDropiOrder() {
+    if (!dropiOrderId.trim()) return;
+    setDropiLoading(true); setDropiError(""); setDropiNotice("");
+    const response = await fetch(`/api/contacts/${contactId}/dropi-orders`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ orderId: dropiOrderId.trim() }),
+    }).catch(() => null);
+    const data = await response?.json().catch(() => null);
+    if (!response?.ok) {
+      setDropiError(data?.message ?? data?.error?.message ?? "No se pudo vincular el pedido.");
+    } else {
+      setDropiOrderId("");
+      setDropiNotice("Pedido vinculado; la IA ya puede usar su información.");
+      await loadDropiOrders();
+    }
+    setDropiLoading(false);
+  }
+
+  async function unlinkDropiOrder(orderId: string) {
+    setDropiError("");
+    const response = await fetch(`/api/contacts/${contactId}/dropi-orders`, {
+      method: "DELETE", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ orderId }),
+    }).catch(() => null);
+    if (!response?.ok) { setDropiError("No se pudo desvincular el pedido."); return; }
+    setDropiNotice("Pedido desvinculado.");
+    await loadDropiOrders();
+  }
   const currentIndex = stages.findIndex((s) => s.id === currentStageId);
 
   return (
