@@ -368,7 +368,7 @@ export type DropiOrganizationOrder = {
   trackingCode: string | null;
   total: string | null;
   currency: string | null;
-  items: { name: string; quantity: string | null }[];
+  items: { name: string; quantity: string | null; productId?: string | null }[];
   updatedAt: string;
   source: "linked" | "vocero";
 };
