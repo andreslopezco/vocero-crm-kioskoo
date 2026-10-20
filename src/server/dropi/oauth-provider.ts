@@ -60,9 +60,14 @@ export class DropiOAuthProvider implements OAuthClientProvider {
       throw new Error("Dropi devolvió una dirección OAuth no confiable.");
     }
     this.authorizationUrl = url;
-    await updateDropiFlowData(this.flowId, this.organizationId, (flow) => { flow.authorizationUrl = url.toString(); });
+    // Runtime MCP clients do not own an authorization flow. A fresh authorization
+    // must be started explicitly from settings, where a flow and state are created.
+    if (this.flowId) {
+      await updateDropiFlowData(this.flowId, this.organizationId, (flow) => { flow.authorizationUrl = url.toString(); });
+    }
   }
   async saveCodeVerifier(value: string) {
+    if (!this.flowId) throw new Error("La autorización de Dropi venció. Vuelve a conectar la cuenta desde Ajustes → Dropi.");
     await updateDropiFlowData(this.flowId, this.organizationId, (flow) => { flow.codeVerifier = value; });
   }
   async codeVerifier() {
