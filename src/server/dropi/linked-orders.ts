@@ -125,6 +125,16 @@ function parseDropiText(text: string): unknown | undefined {
 
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim()) continue;
+    const listHeader = line.match(/^\s*([\w-]+)\[\d+\]:\s*$/);
+    if (listHeader) {
+      const key = listHeader[1];
+      if (!key) continue;
+      activeArray = [];
+      root[key] = activeArray;
+      activeObject = null;
+      itemHeaders = null;
+      continue;
+    }
     const tableHeader = line.match(/^\s*([\w-]+)\[\d+\]\{([^}]+)\}:\s*$/);
     if (tableHeader) {
       const key = tableHeader[1];
@@ -134,6 +144,16 @@ function parseDropiText(text: string): unknown | undefined {
       activeArray = [];
       root[key] = activeArray;
       activeObject = null;
+      continue;
+    }
+
+    const listItem = line.match(/^\s+-\s*([\w-]+):(?:\s*(.*))?$/);
+    if (listItem && activeArray) {
+      const key = listItem[1];
+      if (!key) continue;
+      activeObject = {};
+      activeArray.push(activeObject);
+      activeObject[key] = parseScalar(listItem[2] ?? "");
       continue;
     }
 
