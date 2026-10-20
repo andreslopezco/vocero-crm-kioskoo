@@ -85,6 +85,7 @@ export function ContactPanel({
   const [brain, setBrain] = useState<BrainStatusDto | null>(null);
   const [dropiPanelAvailable, setDropiPanelAvailable] = useState(false);
   const [dropiConnected, setDropiConnected] = useState(false);
+  const [dropiCanLink, setDropiCanLink] = useState(false);
   const [dropiOrders, setDropiOrders] = useState<DropiOrderPanelItem[]>([]);
   const [dropiOrderId, setDropiOrderId] = useState("");
   const [dropiLoading, setDropiLoading] = useState(false);
@@ -121,6 +122,7 @@ export function ContactPanel({
     if (!data) return;
     setDropiPanelAvailable(true);
     setDropiConnected(Boolean(data.connected));
+    setDropiCanLink(Boolean(data.canLink));
     setDropiOrders(Array.isArray(data.orders) ? data.orders : []);
   }, [contactId]);
   // Carga inicial (incluye notas): se re-ejecuta al cambiar de contacto.
@@ -165,6 +167,9 @@ export function ContactPanel({
 
   useEffect(() => {
     setNotesLoaded(false);
+    setDropiOrderId("");
+    setDropiError("");
+    setDropiNotice("");
     // Al cambiar de contacto no puede asomarse el anuncio del anterior.
     setAnuncio(null);
     void refetch();
@@ -458,7 +463,7 @@ export function ContactPanel({
             <p className="mt-2 text-[11px] leading-relaxed text-text-3">
               Vincula un pedido existente por su ID. La IA podrá usar su estado y guía como contexto.
             </p>
-            {dropiConnected ? (
+            {dropiConnected && dropiCanLink ? (
               <form className="mt-3 flex gap-2" onSubmit={(event) => { event.preventDefault(); void linkDropiOrder(); }}>
                 <input
                   aria-label="ID del pedido en Dropi"
@@ -473,6 +478,8 @@ export function ContactPanel({
                   <span className="ml-1">Vincular</span>
                 </Button>
               </form>
+            ) : dropiConnected ? (
+              <p className="mt-2 text-[11px] text-text-3">Solo un administrador puede vincular o desvincular pedidos.</p>
             ) : (
               <Link href="/settings/dropi" className="mt-2 inline-flex text-xs font-medium text-brand-text underline underline-offset-2">Conectar Dropi →</Link>
             )}
