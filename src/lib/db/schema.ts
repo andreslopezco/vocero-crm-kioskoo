@@ -1323,6 +1323,28 @@ export const dropiOrderSubmission = pgTable(
   ]
 );
 
+
+/** Órdenes existentes de Dropi vinculadas manualmente a un contacto. */
+export const dropiOrderLink = pgTable(
+  "dropi_order_link",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    contactId: text("contact_id")
+      .notNull()
+      .references(() => contact.id, { onDelete: "cascade" }),
+    providerOrderId: text("provider_order_id").notNull(),
+    snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("dropi_order_link_org_order_uq").on(t.organizationId, t.providerOrderId),
+    index("dropi_order_link_org_contact_idx").on(t.organizationId, t.contactId, t.createdAt),
+  ]
+);
 /* ============================================================
  * 021 — Despacho al cerebro
  * ============================================================ */
