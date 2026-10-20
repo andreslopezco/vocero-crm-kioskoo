@@ -433,7 +433,7 @@ export function ContactPanel({
                 </Button>
               </form>
             ) : dropiConnected ? (
-              <p className="mt-2 text-[11px] text-text-3">Solo un administrador puede vincular o desvincular pedidos.</p>
+              <p className="mt-2 text-[11px] text-text-3">Solo un propietario o administrador puede vincular o desvincular pedidos.</p>
             ) : (
               <Link href="/settings/dropi" className="mt-2 inline-flex text-xs font-medium text-brand-text underline underline-offset-2">Conectar Dropi →</Link>
             )}
