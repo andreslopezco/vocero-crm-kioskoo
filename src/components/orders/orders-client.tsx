@@ -105,6 +105,27 @@ const ATTENTION_STATUSES = new Set([
   "en investigacion",
   "cerrado por incidencia ver causa",
   "fisico no recibido",
+  "stand by",
+  "cerrado por incidencia, ver causa",
+  "para reclamar en oficina",
+  "en confirmacion telefonica",
+  "para bodega final/custodia",
+  "en bodega final/custodia",
+  "no llego el envio fisico",
+  "en auditoria en terreno",
+  "telemercadeo",
+  "reclame en oficina",
+  "en confirmacin telef nica",
+  "no llego el envo fsico",
+  "guia sin sobre",
+  "novedad en aeropuerto",
+  "problemas de orden publico",
+  "cierre de vias publicas",
+  "no se cubre la zona",
+  "mal zonificado",
+  "condiciones climatologicas adversas",
+  "entregada parcialmente",
+  "mercancia retenida por la dian",
 ]);
 
 function isAttentionRequired(value: string | null) {
@@ -184,6 +205,35 @@ const IN_TRANSIT_STATUSES = new Set([
   "en traslado nacional",
   "en recibo",
   "entregada a conexiones",
+
+  // Estados logísticos adicionales devueltos por Dropi y sus transportadoras.
+  "novedad solucionada",
+  "en espera de rx",
+  "en espera de ruta domestica",
+  "en espera de cita",
+  "cita programada",
+  "solucionada en malla",
+  "origen domestico en espera de despacho nacional",
+  "redireccionado",
+  "en punto droop",
+  "envo admitido",
+  "en distribucin urbana",
+  "distribucion",
+  "en proceso",
+  "cargado en base",
+  "bodega",
+  "bodega destino",
+  "en bodega origen",
+  "recoleccion",
+  "recogido",
+  "recibido punto de venta",
+  "agendado",
+  "reagendado",
+  "en proceso de inspeccion aduanera",
+  "mercancia nacionalizada",
+  "cargada",
+  "digitada",
+  "en continuacion",
 ]);
 
 function isInTransit(value: string | null) {
@@ -204,12 +254,27 @@ function isDelivered(value: string | null) {
     "entregada con boomerang",
     "despacho efectivo",
     "despacho efectivo digitalizada",
+    "entrega verificada",
+    "prueba de entrega digitalizada",
+    "prueba de entrega archivada",
   ]).has(status) || status.includes("delivered ") || status.includes("entregado ");
 }
 
+const ADDITIONAL_UNSUCCESSFUL_STATUSES = new Set([
+  "finalizado por retencion",
+  "devuelta",
+  "dev otros",
+  "dev cerrado cuarentena",
+  "devuelta a remitente",
+  "en traslado nacional con boomerang",
+  "en bodega origen con boomerang",
+  "en distribucion con boomerang",
+]);
+
 function isUnsuccessful(value: string | null) {
   const status = normalizedStatus(value);
-  return /cancel|rechaz|devol|return|anulad|no entregad|rezago|destruccion|indemniz|siniestro|incaut|cerrado o no hay quien reciba|compensacion|al remitente/.test(status);
+  return ADDITIONAL_UNSUCCESSFUL_STATUSES.has(status)
+    || /cancel|rechaz|devol|return|anulad|no entregad|rezago|destruccion|indemniz|siniestro|incaut|cerrado o no hay quien reciba|compensacion|al remitente|devuelt/.test(status);
 }
 
 function displayDate(value: string | null) {
