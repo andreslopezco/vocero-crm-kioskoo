@@ -222,11 +222,6 @@ export function OrdersClient() {
       const activeOrder = sourceOrders.find((order) =>
         (order.providerOrderId ?? order.shopOrderId ?? order.orderId) === actionOrderId
       );
-      const estimatedHeight = showDeleted
-        ? 56
-        : activeOrder?.source === "dropi" && !activeOrder.contactId
-          ? assignmentOrderId === actionOrderId ? 360 : 280
-          : 56;
       const top = rect.bottom + 4;
 
       setMenuPosition({ top, right: Math.max(8, window.innerWidth - rect.right) });
@@ -475,7 +470,6 @@ export function OrdersClient() {
                                   return;
                                 }
                                 const rect = event.currentTarget.getBoundingClientRect();
-                                const estimatedHeight = showDeleted ? 56 : order.source === "dropi" && !order.contactId ? 280 : 56;
                                 const top = Math.max(8, rect.top - estimatedHeight - 4);
                                 setMenuPosition({ top, right: Math.max(8, window.innerWidth - rect.right) });
                                 setActionOrderId(id);
