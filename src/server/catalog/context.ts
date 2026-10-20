@@ -228,7 +228,10 @@ function displayPrice(value: unknown, currency: string | null): string | null {
 }
 
 /** Meta conserva el precio normal en price y la oferta/fechas en attributes. */
-export function catalogProductPricing(product: CatalogProduct, now = new Date()) {
+export function catalogProductPricing(
+  product: Pick<CatalogProduct, "price" | "currency" | "attributes">,
+  now = new Date()
+) {
   const attributes = asAttributes(product.attributes);
   const originalPrice = displayPrice(product.price, product.currency);
   const salePrice = displayPrice(attributes.sale_price, product.currency);
