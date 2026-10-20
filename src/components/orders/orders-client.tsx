@@ -61,12 +61,14 @@ function statusText(value: string | null) {
   return labels[status] ?? (value?.trim() || "Sin estado");
 }
 
-function statusVariant(value: string | null): "success" | "warning" | "attention" | "destructive" | "secondary" {
-  const status = (value ?? "").trim().toLowerCase();
-  if (/delivered|entregado|complete/.test(status)) return "success";
-  if (/cancel|cancelado|reject|rechaz|devol|return|failed|error/.test(status)) return "destructive";
+function statusVariant(value: string | null): "success" | "warning" | "attention" | "info" | "destructive" | "secondary" {
+  const status = normalizedStatus(value);
+  if (isUnsuccessful(value)) return "destructive";
+  if (isDelivered(value)) return "success";
   if (isAttentionRequired(value)) return "attention";
-  if (/pending[ _-]*confirm|pendiente.*confirm|needs_review|review/.test(status)) return "warning";
+  if (isInTransit(value)) return "info";
+  if (isPending(value) || /pending[ _-]*confirm|pending confirmation|needs_review/.test(status)) return "secondary";
+  if (/review|requiere revision/.test(status)) return "attention";
   return "secondary";
 }
 
@@ -190,12 +192,24 @@ function isInTransit(value: string | null) {
 
 function isDelivered(value: string | null) {
   const status = normalizedStatus(value);
-  return status === "delivered" || status === "entregado" || status.includes("delivered ") || status.includes("entregado ");
+  return new Set([
+    "delivered",
+    "entregado",
+    "entregada",
+    "entrega exitosa",
+    "reportado entregado",
+    "entregada digitalizada",
+    "entrega digitalizada",
+    "entregada con observacion",
+    "entregada con boomerang",
+    "despacho efectivo",
+    "despacho efectivo digitalizada",
+  ]).has(status) || status.includes("delivered ") || status.includes("entregado ");
 }
 
 function isUnsuccessful(value: string | null) {
   const status = normalizedStatus(value);
-  return /cancel|rechaz|devol|return/.test(status);
+  return /cancel|rechaz|devol|return|anulad|no entregad|rezago|destruccion|indemniz|siniestro|incaut|cerrado o no hay quien reciba|compensacion|al remitente/.test(status);
 }
 
 function displayDate(value: string | null) {
@@ -469,7 +483,7 @@ export function OrdersClient() {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <Card>
             <CardContent className="flex items-center gap-3 pt-5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-warning-tint text-warning-text"><Clock3 className="h-4 w-4" /></span>
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-subtle text-text-2"><Clock3 className="h-4 w-4" /></span>
               <div><p className="text-xs font-medium text-text-3">Pendientes</p><p className="text-xl font-bold">{loading ? "—" : pendingConfirmation}</p></div>
             </CardContent>
           </Card>
@@ -481,7 +495,7 @@ export function OrdersClient() {
           </Card>
           <Card>
             <CardContent className="flex items-center gap-3 pt-5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-subtle text-text-2"><Truck className="h-4 w-4" /></span>
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-info-tint text-info-text"><Truck className="h-4 w-4" /></span>
               <div><p className="text-xs font-medium text-text-3">En tránsito</p><p className="text-xl font-bold">{loading ? "—" : inTransit}</p></div>
             </CardContent>
           </Card>
