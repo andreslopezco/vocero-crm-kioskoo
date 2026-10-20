@@ -374,9 +374,9 @@ export function OrdersClient() {
                         <td className="min-w-0 px-3 py-3">
                           {order.carrier && <p className="truncate text-xs font-medium" title={order.carrier}>{order.carrier}</p>}
                           {order.trackingCode
-                            ? <p className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-text-2" title={`Guía ${order.trackingCode}`}>
+                            ? <p className="mt-1 flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[11px] text-text-2" title={order.trackingCode}>
                                 <Truck className="h-3 w-3 shrink-0" />
-                                <span className="break-all">Guía {order.trackingCode}</span>
+                                <span className="whitespace-nowrap">{order.trackingCode}</span>
                               </p>
                             : !order.carrier && <span className="text-xs text-text-3">Sin información</span>}
                         </td>
