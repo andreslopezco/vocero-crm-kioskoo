@@ -11,7 +11,7 @@ const publicHttpsUrl = z.string().trim().url().refine((value) => {
 
 export const catalogProductMutationSchema = z.object({
   retailerId: z.string().trim().min(1).max(100),
-  dropiProductId: z.string().trim().max(24).regex(/^\\d+$/, "El ID de Dropi debe contener solo números").optional().or(z.literal("")),
+  dropiProductId: z.string().trim().max(24).regex(/^[1-9]\d{0,23}$/, "El ID de Dropi debe contener solo números").optional().or(z.literal("")),
   name: z.string().trim().min(1).max(200),
   description: z.string().trim().min(1).max(5000),
   availability: z.enum(["in stock", "out of stock", "preorder"]),
