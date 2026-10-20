@@ -236,13 +236,14 @@ export function OrdersClient() {
               </div>
             ) : orders.length ? (
               <div className="overflow-x-auto rounded-lg border bg-card">
-                <table aria-label="Pedidos registrados" className="w-full min-w-[940px] table-fixed text-sm">
+                <table aria-label="Pedidos registrados" className="w-full min-w-[1180px] table-fixed text-sm">
                   <colgroup>
-                    <col className="w-[13%]" />
-                    <col className="w-[17%]" />
-                    <col className="w-[19%]" />
-                    <col className="w-[29%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[27%]" />
                     <col className="w-[11%]" />
+                    <col className="w-[10%]" />
                     <col className="w-[11%]" />
                   </colgroup>
                   <thead className="kicker border-b bg-subtle text-left">
@@ -251,6 +252,7 @@ export function OrdersClient() {
                       <th scope="col" className="px-3 py-2.5 font-medium">Fecha</th>
                       <th scope="col" className="px-3 py-2.5 font-medium">Contacto</th>
                       <th scope="col" className="px-3 py-2.5 font-medium">Productos</th>
+                      <th scope="col" className="px-3 py-2.5 font-medium">Envío</th>
                       <th scope="col" className="px-3 py-2.5 font-medium">Total</th>
                       <th scope="col" className="px-3 py-2.5 font-medium">Estado</th>
                     </tr>
@@ -262,10 +264,7 @@ export function OrdersClient() {
                           <p className="break-all font-semibold leading-5">
                             {order.providerOrderId ?? (order.shopOrderId && !/^voc-/i.test(order.shopOrderId) ? order.shopOrderId : "Pendiente")}
                           </p>
-                          {order.carrier && <p className="mt-1 truncate text-[11px] text-text-3" title={order.carrier}>Transportadora: {order.carrier}</p>}
-                          {order.trackingCode
-                            ? <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-3"><Truck className="h-3 w-3 shrink-0" />Guía {order.trackingCode}</p>
-                            : null}
+
                         </td>
                         <td className="whitespace-nowrap px-3 py-3">
                           <p className="text-xs text-text-2">{displayDate(order.createdAt)}</p>
@@ -287,6 +286,15 @@ export function OrdersClient() {
                               {order.items.length > 2 && <p className="text-xs text-text-3">y {order.items.length - 2} producto(s) más</p>}
                             </div>
                           ) : <span className="text-text-3">Detalle no disponible</span>}
+                        </td>
+                        <td className="min-w-0 px-3 py-3">
+                          {order.carrier && <p className="truncate text-xs font-medium" title={order.carrier}>{order.carrier}</p>}
+                          {order.trackingCode
+                            ? <p className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-text-2" title={`Guía ${order.trackingCode}`}>
+                                <Truck className="h-3 w-3 shrink-0" />
+                                <span className="break-all">Guía {order.trackingCode}</span>
+                              </p>
+                            : !order.carrier && <span className="text-xs text-text-3">Sin información</span>}
                         </td>
                         <td className="whitespace-nowrap px-3 py-3 font-semibold">
                           {displayMoney(order.total, order.currency) ?? <span className="font-normal text-text-3">—</span>}
