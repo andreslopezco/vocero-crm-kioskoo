@@ -78,9 +78,23 @@ function normalizedStatus(value: string | null) {
     .replace(/[ _-]+/g, " ");
 }
 
-function isPendingConfirmation(value: string | null) {
-  const status = normalizedStatus(value);
-  return status.includes("pending confirmation") || status.includes("pendiente confirmacion");
+const PENDING_STATUSES = new Set([
+  // Estados de Dropi antes de que el paquete entre en tránsito.
+  "pendiente confirmacion",
+  "pendiente",
+  "generando guia",
+  "guia generada",
+  "preparado para transportadora",
+
+  // Estados equivalentes de transportadoras: guía creada, aún sin movimiento.
+  "generada",
+  "producida",
+  "a recibir por coordinadora",
+  "en alistamiento en oficina de origen",
+]);
+
+function isPending(value: string | null) {
+  return PENDING_STATUSES.has(normalizedStatus(value));
 }
 
 const IN_TRANSIT_STATUSES = new Set([
@@ -342,7 +356,7 @@ export function OrdersClient() {
   }, [sourceOrders, query]);
 
   const ordersForSummary = data?.orders ?? [];
-  const pendingConfirmation = ordersForSummary.filter((order) => isPendingConfirmation(order.status)).length;
+  const pendingConfirmation = ordersForSummary.filter((order) => isPending(order.status)).length;
   const inTransit = ordersForSummary.filter((order) => isInTransit(order.status)).length;
   const delivered = ordersForSummary.filter((order) => isDelivered(order.status)).length;
   const unsuccessful = ordersForSummary.filter((order) => isUnsuccessful(order.status)).length;
