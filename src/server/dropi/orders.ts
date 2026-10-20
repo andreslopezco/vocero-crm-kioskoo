@@ -52,7 +52,7 @@ export async function dropiPromptContext(organizationId: string, query: string) 
 type MappedOrderProduct = { retailerId: string; name: string; dropiProductId: string; price: string | null; currency: string | null };
 
 function normalizedFichaKey(value: string): string {
-  return value.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function fichaText(ficha: Record<string, string | number | boolean | null>, names: string[]): string | null {
@@ -68,7 +68,7 @@ function fichaText(ficha: Record<string, string | number | boolean | null>, name
 function parseCatalogOrderPrice(value: string | null): number | null {
   if (!value) return null;
   const raw = value.trim().replace(/[^0-9.,-]/g, "");
-  if (!raw || !/\\d/.test(raw)) return null;
+  if (!raw || !/\d/.test(raw)) return null;
   const lastSeparator = Math.max(raw.lastIndexOf("."), raw.lastIndexOf(","));
   let normalized = raw;
   if (lastSeparator >= 0 && raw.length - lastSeparator - 1 <= 2) {
@@ -119,11 +119,11 @@ export function dropiPayloadFromConfirmedFicha(input: {
   const productId = dropiProductIdFromAttributes({ [LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE]: product.dropiProductId });
   const price = parseCatalogOrderPrice(product.price);
   const quantityText = fichaText(input.ficha, ["cantidad", "quantity"]);
-  const quantity = quantityText && /^\\d+$/.test(quantityText) ? Number(quantityText) : NaN;
+  const quantity = quantityText && /^\d+$/.test(quantityText) ? Number(quantityText) : NaN;
   if (!productId || !price || !Number.isSafeInteger(quantity) || quantity <= 0) return null;
 
   const fullName = fichaText(input.ficha, ["nombre completo", "nombre", "name"]);
-  const nameParts = fullName?.split(/\\s+/).filter(Boolean) ?? [];
+  const nameParts = fullName?.split(/\s+/).filter(Boolean) ?? [];
   if (nameParts.length < 2) return null;
   const values: Record<string, unknown> = {};
   const set = (candidates: string[], value: unknown) => {
