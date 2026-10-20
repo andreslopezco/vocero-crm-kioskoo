@@ -115,7 +115,7 @@ const ATTENTION_STATUSES = new Set([
   "en auditoria en terreno",
   "telemercadeo",
   "reclame en oficina",
-  "en confirmacin telef nica",
+  "en confirmacin telefnica",
   "no llego el envo fsico",
   "guia sin sobre",
   "novedad en aeropuerto",
@@ -219,6 +219,7 @@ const IN_TRANSIT_STATUSES = new Set([
   "envo admitido",
   "en distribucin urbana",
   "distribucion",
+  "distribucin",
   "en proceso",
   "cargado en base",
   "bodega",
@@ -257,7 +258,7 @@ function isDelivered(value: string | null) {
     "entrega verificada",
     "prueba de entrega digitalizada",
     "prueba de entrega archivada",
-  ]).has(status) || status.includes("delivered ") || status.includes("entregado ");
+  ]).has(status);
 }
 
 const ADDITIONAL_UNSUCCESSFUL_STATUSES = new Set([
