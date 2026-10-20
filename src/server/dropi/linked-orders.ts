@@ -1,10 +1,10 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
 import { getDropiConnection } from "./credentials";
 import { phoneFromFicha } from "@/server/bot/ficha";
-import { callDropiTool, listDropiTools } from "./mcp-client";
+import { callDropiTool, callDropiToolPages, listDropiTools } from "./mcp-client";
 import { dropiProductIdFromAttributes } from "./product-mapping";
 
 export class DropiLinkError extends Error {
@@ -21,7 +21,7 @@ export type DropiLinkedOrder = {
   currency: string | null;
   items: { name: string; quantity: string | null; productId?: string | null }[];
   updatedAt: string;
-  source: "linked" | "vocero";
+  source: "linked" | "vocero" | "dropi";
 };
 
 function normalizedKey(value: string) {
@@ -226,6 +226,61 @@ function decodeOrder(result: {
   if (structuredCombined !== undefined) return structuredCombined;
   throw new DropiLinkError("Dropi devolvió una respuesta de pedido que no se pudo interpretar.", "invalid_response");
 }
+function findNamedArray(value: unknown, name: string): unknown[] {
+  const wanted = normalizedKey(name);
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const record = value as Record<string, unknown>;
+  for (const [key, candidate] of Object.entries(record)) {
+    if (normalizedKey(key) === wanted && Array.isArray(candidate)) return candidate;
+  }
+  for (const candidate of Object.values(record)) {
+    const found = findNamedArray(candidate, name);
+    if (found.length) return found;
+  }
+  return [];
+}
+
+function decodeOrderPage(result: {
+  content?: Array<{ type: string; text?: string }>;
+  structuredContent?: unknown;
+  isError?: boolean;
+}): unknown[] {
+  if (result.isError) throw new DropiLinkError("Dropi no pudo consultar la lista de pedidos.", "provider_error");
+  const candidates: unknown[] = [];
+  if (result.structuredContent !== undefined && result.structuredContent !== null) candidates.push(result.structuredContent);
+  for (const block of result.content ?? []) if (block.type === "text" && block.text) candidates.push(block.text);
+  const arrayKeys = ["orders", "order_list", "orderlist", "results", "records", "data", "items"];
+  for (const candidate of candidates) {
+    let parsed: unknown = candidate;
+    if (typeof parsed === "string") {
+      try { parsed = JSON.parse(parsed) as unknown; }
+      catch { parsed = parseDropiText(parsed) ?? parsed; }
+    }
+    if (typeof parsed === "string") {
+      try { parsed = JSON.parse(parsed) as unknown; } catch { continue; }
+    }
+    if (Array.isArray(parsed)) return parsed;
+    for (const key of arrayKeys) {
+      const rows = findNamedArray(parsed, key);
+      if (rows.length) return rows;
+    }
+  }
+  throw new DropiLinkError("Dropi devolvió una lista de pedidos que no se pudo interpretar.", "invalid_response");
+}
+
+function providerOrderId(data: unknown): string | null {
+  return textValue(findValue(data, ["provider_order_id", "order_id", "orderId", "code", "id"]));
+}
+
+function orderCustomer(data: unknown) {
+  const customer = findValue(data, ["customer", "client", "recipient", "buyer"]);
+  const scope = customer ?? data;
+  return {
+    phone: textValue(findValue(scope, ["customer_phone", "customerPhone", "phone_number", "phoneNumber", "cellphone", "mobile", "phone", "telephone"])),
+    name: textValue(findValue(scope, ["customer_name", "full_name", "name", "contact_name"])),
+  };
+}
+
 function carrierFromOrder(data: unknown): string | null {
   const carrier = findValue(data, [
     "shipping_company", "shipping_carrier", "carrier_name", "carrier",
@@ -399,7 +454,7 @@ export type DropiOrganizationOrder = {
   orderId: string;
   providerOrderId: string | null;
   shopOrderId: string | null;
-  contactId: string;
+  contactId: string | null;
   contactName: string;
   contactPhone: string | null;
   status: string | null;
@@ -446,17 +501,7 @@ export async function refreshDropiOrders(organizationId: string) {
   }
 
   const db = getDb();
-  const [links, submissions, tools] = await Promise.all([
-    db.select({
-      id: schema.dropiOrderLink.id,
-      providerOrderId: schema.dropiOrderLink.providerOrderId,
-      contactId: schema.dropiOrderLink.contactId,
-      snapshot: schema.dropiOrderLink.snapshot,
-      createdAt: schema.dropiOrderLink.createdAt,
-    }).from(schema.dropiOrderLink)
-      .where(scoped(schema.dropiOrderLink.organizationId, organizationId))
-      .orderBy(desc(schema.dropiOrderLink.updatedAt))
-      .limit(10),
+  const [submissions, contacts, links, tools] = await Promise.all([
     db.select({
       id: schema.dropiOrderSubmission.id,
       providerOrderId: schema.dropiOrderSubmission.providerOrderId,
@@ -467,44 +512,89 @@ export async function refreshDropiOrders(organizationId: string) {
     }).from(schema.dropiOrderSubmission)
       .where(scoped(schema.dropiOrderSubmission.organizationId, organizationId))
       .orderBy(desc(schema.dropiOrderSubmission.createdAt)),
+    db.select({ id: schema.contact.id, name: schema.contact.name, phone: schema.contact.phone })
+      .from(schema.contact).where(scoped(schema.contact.organizationId, organizationId)),
+    db.select({ id: schema.dropiOrderLink.id, providerOrderId: schema.dropiOrderLink.providerOrderId })
+      .from(schema.dropiOrderLink).where(scoped(schema.dropiOrderLink.organizationId, organizationId)),
     listDropiTools(organizationId),
   ]);
 
-  const tool = tools.find((entry) => entry.name === "get_order");
+  const tool = tools.find((entry) => entry.name === "list_orders");
   const inputSchema = tool?.inputSchema as { properties?: Record<string, unknown>; required?: string[] } | undefined;
-  const idKey = Object.keys(inputSchema?.properties ?? []).find((key) =>
-    ["id", "orderid", "order_id", "ordercode", "order_code"].includes(normalizedKey(key))
-  );
-  if (!tool || !idKey) throw new DropiLinkError("Dropi no ofrece una herramienta compatible para consultar pedidos.", "tool_unavailable");
-  const missing = (inputSchema?.required ?? []).filter((key) => key !== idKey);
-  if (missing.length) throw new DropiLinkError("Dropi exige datos adicionales para consultar un pedido.", "missing_fields");
+  const properties = inputSchema?.properties ?? {};
+  const startKey = Object.keys(properties).find((key) => normalizedKey(key) === "start");
+  const pageSizeKey = Object.keys(properties).find((key) => ["resultnumber", "pagesize", "limit"].includes(normalizedKey(key)));
+  if (!tool || !startKey || !pageSizeKey) {
+    throw new DropiLinkError("Dropi no ofrece una herramienta paginada compatible para importar todos los pedidos.", "list_orders_unavailable");
+  }
+  const missing = (inputSchema?.required ?? []).filter((key) => key !== startKey && key !== pageSizeKey);
+  if (missing.length) throw new DropiLinkError("Dropi exige filtros adicionales para listar pedidos.", "missing_fields");
 
-  const refreshed: Array<{
-    id: string;
-    providerOrderId: string;
-    contactId: string;
-    createdAt: Date;
+  const pageSize = 100;
+  const pages = await callDropiToolPages(
+    organizationId,
+    "list_orders",
+    (page) => ({ [startKey]: page * pageSize, [pageSizeKey]: pageSize }),
+    (result) => decodeOrderPage(result).length >= pageSize
+  );
+  const providerRows = pages.flatMap((page) => decodeOrderPage(page));
+  const contactIdsByPhone = new Map<string, string[]>();
+  for (const contact of contacts) {
+    const phone = normalizedPhone(contact.phone);
+    if (phone) contactIdsByPhone.set(phone, [...(contactIdsByPhone.get(phone) ?? []), contact.id]);
+  }
+
+  const imported: Array<{
+    orderId: string;
+    contactId: string | null;
+    createdAt: Date | null;
     summary: DropiLinkedOrder;
   }> = [];
-  for (const row of links) {
-    try {
-      const result = await callDropiTool(organizationId, "get_order", { [idKey]: row.providerOrderId });
-      const data = decodeOrder(result);
-      const summary = summaryFromOrder(row.providerOrderId, data, "linked");
-      const now = new Date();
-      await db.update(schema.dropiOrderLink).set({ snapshot: summary, updatedAt: now }).where(scoped(
-        schema.dropiOrderLink.organizationId,
-        organizationId,
-        eq(schema.dropiOrderLink.id, row.id)
-      ));
-      refreshed.push({ id: row.id, providerOrderId: row.providerOrderId, contactId: row.contactId, createdAt: row.createdAt, summary });
-    } catch (error) {
-      console.warn("[orders] Dropi refresh failed for linked order", row.providerOrderId, error instanceof Error ? error.message : "unknown");
-    }
+  const now = new Date();
+  const seen = new Set<string>();
+  for (const row of providerRows) {
+    const orderId = providerOrderId(row);
+    if (!orderId || seen.has(orderId)) continue;
+    seen.add(orderId);
+    const summary = summaryFromOrder(orderId, row, "dropi");
+    const customer = orderCustomer(row);
+    const matches = contactIdsByPhone.get(normalizedPhone(customer.phone)) ?? [];
+    const contactId = matches.length === 1 ? matches[0]! : null;
+    imported.push({ orderId, contactId, createdAt: summary.createdAt ? new Date(summary.createdAt) : null, summary: { ...summary, customerName: customer.name } });
+  }
+
+  for (let offset = 0; offset < imported.length; offset += 100) {
+    const batch = imported.slice(offset, offset + 100);
+    const timestamp = new Date();
+    await db.insert(schema.dropiOrderSync).values(batch.map((order) => ({
+      id: newId("dropiOrderSync"),
+      organizationId,
+      orderId: order.orderId,
+      contactId: order.contactId,
+      snapshot: order.summary as unknown as Record<string, unknown>,
+      ignored: false,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }))).onConflictDoUpdate({
+      target: [schema.dropiOrderSync.organizationId, schema.dropiOrderSync.orderId],
+      set: {
+        contactId: sql`excluded.contact_id`,
+        snapshot: sql`excluded.snapshot`,
+        updatedAt: sql`excluded.updated_at`,
+      },
+    });
+  }
+
+  const linkByProviderId = new Map(links.map((link) => [link.providerOrderId, link.id]));
+  for (const order of imported) {
+    const linkId = linkByProviderId.get(order.orderId);
+    if (!linkId) continue;
+    await db.update(schema.dropiOrderLink).set({ snapshot: order.summary as unknown as Record<string, unknown>, updatedAt: now })
+      .where(scoped(schema.dropiOrderLink.organizationId, organizationId, eq(schema.dropiOrderLink.id, linkId)));
   }
 
   const orphanSubmissions = submissions.filter((row) => !row.providerOrderId);
-  const matchesBySubmission = new Map<string, typeof refreshed>();
+  const matchesBySubmission = new Map<string, typeof imported>();
   const matchesByProviderOrder = new Map<string, string[]>();
   const freshnessWindow = 7 * 24 * 60 * 60 * 1000;
 
@@ -512,15 +602,16 @@ export async function refreshDropiOrders(organizationId: string) {
     const signature = productSignature(organizationOrderItems(submission.payload));
     if (!signature) continue;
     const submissionTime = submission.createdAt.getTime();
-    const candidates = refreshed.filter((order) =>
+    const candidates = imported.filter((order) =>
       order.contactId === submission.contactId &&
+      order.createdAt !== null &&
       Math.abs(order.createdAt.getTime() - submissionTime) <= freshnessWindow &&
       productSignature(order.summary.items) === signature
     );
     if (candidates.length !== 1) continue;
     matchesBySubmission.set(submission.id, candidates);
-    const providerOrderId = candidates[0]!.providerOrderId;
-    matchesByProviderOrder.set(providerOrderId, [...(matchesByProviderOrder.get(providerOrderId) ?? []), submission.id]);
+    const providerId = candidates[0]!.orderId;
+    matchesByProviderOrder.set(providerId, [...(matchesByProviderOrder.get(providerId) ?? []), submission.id]);
   }
 
   let reconciledOrders = 0;
@@ -528,9 +619,9 @@ export async function refreshDropiOrders(organizationId: string) {
     const candidates = matchesBySubmission.get(submission.id);
     if (!candidates?.length) continue;
     const candidate = candidates[0]!;
-    if (matchesByProviderOrder.get(candidate.providerOrderId)?.length !== 1) continue;
+    if (matchesByProviderOrder.get(candidate.orderId)?.length !== 1) continue;
     await db.update(schema.dropiOrderSubmission).set({
-      providerOrderId: candidate.providerOrderId,
+      providerOrderId: candidate.orderId,
       providerStatus: candidate.summary.status,
       status: "submitted",
       updatedAt: new Date(),
@@ -542,7 +633,7 @@ export async function refreshDropiOrders(organizationId: string) {
     reconciledOrders += 1;
   }
 
-  return { refreshedOrders: refreshed.length, reconciledOrders, failedOrders: links.length - refreshed.length };
+  return { refreshedOrders: imported.length, reconciledOrders, failedOrders: 0 };
 }
 
 /** Lista pedidos creados desde Vocero y pedidos de Dropi vinculados, dentro de la organización. */
