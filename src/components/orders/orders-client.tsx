@@ -36,7 +36,6 @@ type Order = {
 
 type OrdersResponse = { connected: boolean; orders: Order[] };
 type ContactOption = { id: string; name: string; phone: string | null };
-type Filter = "all" | "review";
 
 function statusText(value: string | null) {
   const status = (value ?? "").trim().toLowerCase().replace(/[ -]+/g, "_");
@@ -57,10 +56,10 @@ function statusText(value: string | null) {
 }
 
 function statusVariant(value: string | null): "success" | "warning" | "destructive" | "secondary" {
-  const status = (value ?? "").toLowerCase();
-  if (/delivered|confirm|complete/.test(status)) return "success";
-  if (/fail|error|cancel/.test(status)) return "destructive";
-  if (/review|unknown|submitt|pending/.test(status)) return "warning";
+  const status = (value ?? "").trim().toLowerCase();
+  if (/delivered|entregado|complete/.test(status)) return "success";
+  if (/cancel|cancelado|reject|rechaz|failed|error/.test(status)) return "destructive";
+  if (/pending[ _-]*confirm|pendiente.*confirm|needs_review|review/.test(status)) return "warning";
   return "secondary";
 }
 
@@ -120,7 +119,6 @@ export function OrdersClient() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
   const [actionOrderId, setActionOrderId] = useState<string | null>(null);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [assignmentOrderId, setAssignmentOrderId] = useState<string | null>(null);
@@ -198,10 +196,9 @@ export function OrdersClient() {
     const normalized = query.trim().toLocaleLowerCase("es");
     return (data?.orders ?? []).filter((order) => {
       if (normalized && !searchText(order).includes(normalized)) return false;
-      if (filter === "review" && !/review|unknown|submitt|pending/i.test(order.status ?? "")) return false;
       return true;
     });
-  }, [data, filter, query]);
+  }, [data, query]);
 
   const needsReview = (data?.orders ?? []).filter((order) =>
     /review|unknown|submitt|pending/i.test(order.status ?? "")
@@ -297,15 +294,10 @@ export function OrdersClient() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar pedidos">
-              {([
-                ["all", "Todos"],
-                ["review", "Pendientes de revisión"],
-              ] as const).map(([value, label]) => (
-                <Button key={value} type="button" size="sm" variant={filter === value ? "secondary" : "ghost"} onClick={() => setFilter(value)} aria-pressed={filter === value}>
-                  {label}
-                </Button>
-              ))}
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Pedidos">
+              <Button type="button" size="sm" variant="secondary" aria-pressed="true">
+                Todos
+              </Button>
             </div>
 
             {error && <div role="alert" className="rounded-md border border-danger-soft bg-danger-tint px-4 py-3 text-sm text-danger-text">{error}</div>}
@@ -385,7 +377,7 @@ export function OrdersClient() {
                         </td>
                         <td className="px-3 py-3">
                           <Badge
-                            className="max-w-full truncate whitespace-nowrap px-1.5 py-0.5 text-[9px] leading-4"
+                            className="max-w-full truncate whitespace-nowrap px-1 py-0 text-[8px] leading-3"
                             title={statusText(order.status)}
                             variant={statusVariant(order.status)}
                           >
