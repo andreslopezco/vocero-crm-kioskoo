@@ -238,8 +238,6 @@ describe("catálogo Meta del agente (031)", () => {
       attributes: {
         material: "cuero",
         sale_price: "99000",
-        sale_price_start_date: "2026-10-01T00:00:00-0500",
-        sale_price_end_date: "2026-10-31T23:59:59-0500",
       },
     };
     const message = catalogProductsText([saleProduct], "tiktok");
@@ -249,7 +247,7 @@ describe("catálogo Meta del agente (031)", () => {
 
     const beforeSale = catalogProductsText([{
       ...saleProduct,
-      attributes: { ...saleProduct.attributes, sale_price_start_date: "2026-11-01T00:00:00-0500" },
+      attributes: { ...saleProduct.attributes, sale_price_end_date: "2000-11-01T00:00:00-0500" },
     }], "tiktok");
     expect(beforeSale).toContain("Precio: 120000 COP");
     expect(beforeSale).not.toContain("Antes:");
