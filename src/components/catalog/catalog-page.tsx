@@ -42,7 +42,7 @@ type ProductForm = {
   size: string;
   pattern: string;
 };
-type ProductEditor = { product: Product };
+type ProductEditor = Product;
 
 const EMPTY_FORM: ProductForm = {
   retailerId: "", dropiProductId: "", name: "", description: "", availability: "", condition: "",
@@ -228,7 +228,7 @@ export function CatalogPage() {
     setSuccess(null);
     setForm(formFromProduct(product));
     setFormError(null);
-    setEditor({ product });
+    setEditor(product);
   }
 
   async function saveProduct(event: React.FormEvent<HTMLFormElement>) {
