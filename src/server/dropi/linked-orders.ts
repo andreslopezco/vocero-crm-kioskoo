@@ -135,8 +135,9 @@ function parseDropiText(text: string): unknown | undefined {
 
     const field = line.match(/^(\s*)([\w-]+):(?:\s*(.*))?$/);
     if (field) {
-      const indent = field[1].length;
+      const indent = field[1]?.length ?? 0;
       const key = field[2];
+      if (!key) continue;
       const value = field[3] ?? "";
       if (indent === 0) {
         itemHeaders = null;
