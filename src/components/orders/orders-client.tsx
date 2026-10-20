@@ -300,7 +300,13 @@ export function OrdersClient() {
                           {displayMoney(order.total, order.currency) ?? <span className="font-normal text-text-3">—</span>}
                         </td>
                         <td className="px-3 py-3">
-                          <Badge className="whitespace-nowrap px-2 py-0.5 text-[10px]" variant={statusVariant(order.status)}>{statusText(order.status)}</Badge>
+                          <Badge
+                            className="max-w-full truncate whitespace-nowrap px-1.5 py-0.5 text-[9px] leading-4"
+                            title={statusText(order.status)}
+                            variant={statusVariant(order.status)}
+                          >
+                            {statusText(order.status)}
+                          </Badge>
                         </td>
                       </tr>
                     ))}
