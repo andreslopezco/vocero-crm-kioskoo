@@ -393,6 +393,8 @@ export type DropiOrganizationOrder = {
   contactPhone: string | null;
   status: string | null;
   trackingCode: string | null;
+  createdAt: string | null;
+  carrier: string | null;
   total: string | null;
   currency: string | null;
   items: { name: string; quantity: string | null; productId?: string | null }[];
