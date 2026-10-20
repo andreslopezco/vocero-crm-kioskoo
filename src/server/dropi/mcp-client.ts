@@ -5,8 +5,9 @@ import {
   type CallToolResult,
   type Tool,
 } from "@modelcontextprotocol/client";
+import { getSql } from "@/lib/db";
 import { dropiConfig } from "./config";
-import { createDropiOAuthFlow, getDropiFlowById, saveDropiToolSnapshot, consumeDropiFlowByState, setDropiError } from "./credentials";
+import { createDropiOAuthFlow, getDropiFlowById, saveDropiToolSnapshot, consumeDropiFlowByState, setDropiErrorIfCredentialsUnchanged } from "./credentials";
 import { DropiOAuthProvider } from "./oauth-provider";
 
 function clientFor(provider: DropiOAuthProvider) {
@@ -135,22 +136,45 @@ export async function callDropiToolPages(
 }
 
 async function withDropiClient<T>(organizationId: string, task: (client: Client) => Promise<T>): Promise<T> {
-  const row = await import("@/server/dropi/credentials").then((m) => m.getDropiConnection(organizationId));
-  if (!row) throw new Error("Dropi no está conectado.");
-  const provider = new DropiOAuthProvider("", organizationId);
-  const { client, transport } = clientFor(provider);
+  // Dropi may rotate refresh tokens. A database advisory lock makes refresh and
+  // credential persistence single-file across all app instances, not just one process.
+  const sql = getSql();
+  const connection = await sql.reserve();
+  let lockAcquired = false;
   try {
-    await client.connect(transport);
-    return await task(client);
-  } catch (error) {
-    const requiresReconnect = UnauthorizedError.isInstance(error) ||
-      (error instanceof Error && error.message.includes("autorización de Dropi venció"));
-    if (requiresReconnect) {
-      await setDropiError(organizationId, "La autorización de Dropi venció. Vuelve a conectar la cuenta desde Ajustes → Dropi.");
+    await connection`SELECT pg_advisory_lock(hashtextextended(${organizationId}, 0))`;
+    lockAcquired = true;
+
+    // Read the credentials only after the lock: a queued request must use the
+    // token bundle saved by the previous request, including a rotated refresh token.
+    const row = await import("@/server/dropi/credentials").then((m) => m.getDropiConnection(organizationId));
+    if (!row) throw new Error("Dropi no está conectado.");
+    const provider = new DropiOAuthProvider("", organizationId);
+    const { client, transport } = clientFor(provider);
+    try {
+      await client.connect(transport);
+      return await task(client);
+    } catch (error) {
+      const requiresReconnect = UnauthorizedError.isInstance(error) ||
+        (error instanceof Error && error.message.includes("autorización de Dropi venció"));
+      if (requiresReconnect) {
+        // A failed request must not overwrite credentials another path has since
+        // refreshed or re-authorized.
+        await setDropiErrorIfCredentialsUnchanged(
+          organizationId,
+          row.oauthCipher,
+          "La autorización de Dropi venció. Vuelve a conectar la cuenta desde Ajustes → Dropi."
+        );
+      }
+      throw error;
+    } finally {
+      await client.close().catch(() => undefined);
+      await transport.close().catch(() => undefined);
     }
-    throw error;
   } finally {
-    await client.close().catch(() => undefined);
-    await transport.close().catch(() => undefined);
+    if (lockAcquired) {
+      await connection`SELECT pg_advisory_unlock(hashtextextended(${organizationId}, 0))`.catch(() => undefined);
+    }
+    connection.release();
   }
 }
