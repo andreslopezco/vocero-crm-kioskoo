@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   AlertCircle,
+  CircleCheck,
+  CircleX,
+  Clock3,
   MoreHorizontal,
   PackageCheck,
   RotateCcw,
@@ -64,6 +67,35 @@ function statusVariant(value: string | null): "success" | "warning" | "destructi
   if (/cancel|cancelado|reject|rechaz|devol|return|failed|error/.test(status)) return "destructive";
   if (/pending[ _-]*confirm|pendiente.*confirm|needs_review|review/.test(status)) return "warning";
   return "secondary";
+}
+
+function normalizedStatus(value: string | null) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[ _-]+/g, " ");
+}
+
+function isPendingConfirmation(value: string | null) {
+  const status = normalizedStatus(value);
+  return status.includes("pending confirmation") || status.includes("pendiente confirmacion");
+}
+
+function isInTransit(value: string | null) {
+  // Por ahora solo contamos el estado de Dropi que ya identificamos; se amplía al confirmar otros estados.
+  return normalizedStatus(value).includes("bodega destino");
+}
+
+function isDelivered(value: string | null) {
+  const status = normalizedStatus(value);
+  return status === "delivered" || status === "entregado" || status.includes("delivered ") || status.includes("entregado ");
+}
+
+function isUnsuccessful(value: string | null) {
+  const status = normalizedStatus(value);
+  return /cancel|rechaz|devol|return/.test(status);
 }
 
 function displayDate(value: string | null) {
@@ -239,9 +271,11 @@ export function OrdersClient() {
     });
   }, [sourceOrders, query]);
 
-  const needsReview = (data?.orders ?? []).filter((order) =>
-    /review|unknown|submitt|pending/i.test(order.status ?? "")
-  ).length;
+  const ordersForSummary = data?.orders ?? [];
+  const pendingConfirmation = ordersForSummary.filter((order) => isPendingConfirmation(order.status)).length;
+  const inTransit = ordersForSummary.filter((order) => isInTransit(order.status)).length;
+  const delivered = ordersForSummary.filter((order) => isDelivered(order.status)).length;
+  const unsuccessful = ordersForSummary.filter((order) => isUnsuccessful(order.status)).length;
 
   async function removeOrder(order: Order) {
     const orderId = order.providerOrderId ?? order.shopOrderId ?? order.orderId;
@@ -331,17 +365,35 @@ export function OrdersClient() {
           </div>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <Card>
             <CardContent className="flex items-center gap-3 pt-5">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-tint text-brand-text"><PackageCheck className="h-4 w-4" /></span>
-              <div><p className="text-xs font-medium text-text-3">Pedidos registrados</p><p className="text-xl font-bold">{loading ? "—" : data?.orders.length ?? 0}</p></div>
+              <div><p className="text-xs font-medium text-text-3">Pedidos registrados</p><p className="text-xl font-bold">{loading ? "—" : ordersForSummary.length}</p></div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="flex items-center gap-3 pt-5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-warning-tint text-warning-text"><AlertCircle className="h-4 w-4" /></span>
-              <div><p className="text-xs font-medium text-text-3">Pendientes de revisión</p><p className="text-xl font-bold">{loading ? "—" : needsReview}</p></div>
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-warning-tint text-warning-text"><Clock3 className="h-4 w-4" /></span>
+              <div><p className="text-xs font-medium text-text-3">Pendientes de confirmación</p><p className="text-xl font-bold">{loading ? "—" : pendingConfirmation}</p></div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 pt-5">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-subtle text-text-2"><Truck className="h-4 w-4" /></span>
+              <div><p className="text-xs font-medium text-text-3">En tránsito</p><p className="text-xl font-bold">{loading ? "—" : inTransit}</p></div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 pt-5">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-success-tint text-success-text"><CircleCheck className="h-4 w-4" /></span>
+              <div><p className="text-xs font-medium text-text-3">Entregados</p><p className="text-xl font-bold">{loading ? "—" : delivered}</p></div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 pt-5">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-danger-tint text-danger-text"><CircleX className="h-4 w-4" /></span>
+              <div><p className="text-xs font-medium text-text-3">No exitosos</p><p className="text-xl font-bold">{loading ? "—" : unsuccessful}</p></div>
             </CardContent>
           </Card>
         </div>
