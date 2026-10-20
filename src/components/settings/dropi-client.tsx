@@ -81,19 +81,6 @@ export function DropiSettingsClient({ canConfigure }: { canConfigure: boolean })
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <header>
-        <p className="kicker">Integraciones</p>
-        <div className="mt-1 flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Pedidos en Dropi</h1>
-          <Badge variant={view.connected ? "success" : "secondary"}>
-            {view.connected ? "Conectado" : "Sin conectar"}
-          </Badge>
-        </div>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-text-2">
-          El agente puede preparar pedidos con los datos recopilados en la conversación y dejarlos listos para revisión humana en Dropi.
-        </p>
-      </header>
-
       {!view.config.ready && (
         <div className="flex items-start gap-3 rounded-md border border-warning-soft bg-warning-tint p-4 text-sm text-warning-text" role="status">
           <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
@@ -102,21 +89,16 @@ export function DropiSettingsClient({ canConfigure }: { canConfigure: boolean })
       )}
 
       <Card>
-        <CardHeader className="flex-row items-start justify-between gap-4 border-b border-border-strong">
-          <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-brand-tint text-brand-text">
-              {view.connected ? <CheckCircle2 className="h-5 w-5" /> : <PlugZap className="h-5 w-5" />}
-            </span>
-            <div className="space-y-1">
-              <CardTitle>{view.connected ? "Cuenta de Dropi conectada" : "Conecta tu cuenta de Dropi"}</CardTitle>
-              <CardDescription>
-                {view.connected
-                  ? "Configura cómo se preparan los pedidos y revisa la conexión con el proveedor."
-                  : "Autoriza el acceso para que Vocero pueda consultar y preparar pedidos."}
-              </CardDescription>
-            </div>
+        <CardHeader className="gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle>Pedidos en Dropi</CardTitle>
+            <Badge variant={view.connected ? "success" : "secondary"}>
+              {view.connected ? "Conectado" : "Sin conectar"}
+            </Badge>
           </div>
-          {view.connected && <Badge variant="success">Activa</Badge>}
+          <CardDescription>
+            El agente puede preparar pedidos con los datos recopilados en la conversación y dejarlos listos para revisión humana en Dropi.
+          </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-5 pt-5">
