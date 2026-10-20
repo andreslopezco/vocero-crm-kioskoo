@@ -9,7 +9,6 @@ import {
   Loader2,
   PackageCheck,
   Pencil,
-  Unlink,
   X,
   Check,
   ChevronRight,
@@ -45,7 +44,7 @@ type DropiOrderPanelItem = {
   orderId: string; status: string | null; trackingCode: string | null;
   carrier: string | null; total: string | null; currency: string | null;
   items: { name: string; quantity: string | null }[];
-  updatedAt: string; source: "linked" | "vocero"; canUnlink: boolean;
+  updatedAt: string;
 };
 
 function dropiStatusText(value: string | null) {
@@ -148,6 +147,7 @@ export function ContactPanel({
   const [dropiConnected, setDropiConnected] = useState(false);
   const [dropiCanLink, setDropiCanLink] = useState(false);
   const [dropiOrders, setDropiOrders] = useState<DropiOrderPanelItem[]>([]);
+  const [visibleDropiOrderCount, setVisibleDropiOrderCount] = useState(2);
   const [dropiOrderId, setDropiOrderId] = useState("");
   const [dropiLoading, setDropiLoading] = useState(false);
   const [dropiError, setDropiError] = useState("");
@@ -237,6 +237,7 @@ export function ContactPanel({
   useEffect(() => {
     setNotesLoaded(false);
     setDropiOrderId("");
+    setVisibleDropiOrderCount(2);
     setDropiError("");
     setDropiNotice("");
     // Al cambiar de contacto no puede asomarse el anuncio del anterior.
@@ -328,16 +329,6 @@ export function ContactPanel({
     setDropiLoading(false);
   }
 
-  async function unlinkDropiOrder(orderId: string) {
-    setDropiError("");
-    const response = await fetch(`/api/contacts/${contactId}/dropi-orders`, {
-      method: "DELETE", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ orderId }),
-    }).catch(() => null);
-    if (!response?.ok) { setDropiError("No se pudo desvincular el pedido."); return; }
-    setDropiNotice("Pedido desvinculado.");
-    await loadDropiOrders();
-  }
   const currentIndex = stages.findIndex((s) => s.id === currentStageId);
 
   return (
@@ -574,7 +565,7 @@ export function ContactPanel({
             {dropiNotice && <p role="status" className="mt-2 text-xs text-success-text">{dropiNotice}</p>}
             {dropiOrders.length > 0 && (
               <ul className="mt-3 space-y-2">
-                {dropiOrders.map((order) => (
+                {dropiOrders.slice(0, visibleDropiOrderCount).map((order) => (
                   <li key={order.orderId} className="rounded-md border bg-subtle p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -586,11 +577,6 @@ export function ContactPanel({
                           {dropiStatusText(order.status)}
                         </Badge>
                       </div>
-                      {order.canUnlink && (
-                        <button type="button" aria-label={`Desvincular pedido ${order.orderId}`} onClick={() => void unlinkDropiOrder(order.orderId)} className="rounded p-1 text-text-3 hover:bg-accent hover:text-danger-text">
-                          <Unlink className="h-3.5 w-3.5" strokeWidth={1.7} />
-                        </button>
-                      )}
                     </div>
                     {order.items.length > 0 && <p className="mt-2 line-clamp-2 text-[11px] text-text-3">{order.items.map((item) => `${item.name}${item.quantity ? ` × ${item.quantity}` : ""}`).join(", ")}</p>}
                     {(order.carrier || order.trackingCode) && (
@@ -607,6 +593,17 @@ export function ContactPanel({
                   </li>
                 ))}
               </ul>
+            )}
+            {dropiOrders.length > visibleDropiOrderCount && (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="mt-2 w-full"
+                onClick={() => setVisibleDropiOrderCount((count) => Math.min(count + 2, dropiOrders.length))}
+              >
+                Cargar más pedidos
+              </Button>
             )}
           </section>
         )}
