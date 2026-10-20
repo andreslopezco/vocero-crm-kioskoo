@@ -2,6 +2,7 @@ import {
   CalendarDays,
   ChartColumn,
   PackageSearch,
+  PackageCheck,
   FlaskConical,
   Inbox,
   Kanban,
@@ -51,12 +52,15 @@ export const SETTINGS_ITEM: NavItem = {
 export function appNavGroups({
   agenda = false,
   catalogo = false,
+  dropi = false,
   role,
 }: {
   /** 015 — "Citas" solo existe si esta instancia encendió la agenda. */
   agenda?: boolean;
   /** 031 — El catálogo consultable solo existe cuando el módulo está activo. */
   catalogo?: boolean;
+  /** 033 — Pedidos Dropi visibles solo cuando la integración está habilitada. */
+  dropi?: boolean;
   /** #86 — La guía de inicio solo para quien puede configurar. */
   role?: string | null;
 }): NavGroup[] {
@@ -68,6 +72,7 @@ export function appNavGroups({
   // Citas va después de Contactos: es el paso siguiente de un trato, no una
   // sección aparte.
   if (agenda) trabajo.push({ href: "/bookings", label: "Citas", icon: CalendarDays });
+  if (dropi) trabajo.push({ href: "/orders", label: "Pedidos", icon: PackageCheck });
 
   const agente: NavItem[] = [];
   // Un miembro del equipo no puede hacer ninguno de los pasos de la guía.
