@@ -227,9 +227,7 @@ export function OrdersClient() {
         : activeOrder?.source === "dropi" && !activeOrder.contactId
           ? assignmentOrderId === actionOrderId ? 360 : 280
           : 56;
-      const top = window.innerHeight - rect.bottom > estimatedHeight + 12
-        ? rect.bottom + 4
-        : Math.max(8, rect.top - estimatedHeight - 4);
+      const top = Math.max(8, rect.top - estimatedHeight - 4);
 
       setMenuPosition({ top, right: Math.max(8, window.innerWidth - rect.right) });
     };
@@ -478,9 +476,7 @@ export function OrdersClient() {
                                 }
                                 const rect = event.currentTarget.getBoundingClientRect();
                                 const estimatedHeight = showDeleted ? 56 : order.source === "dropi" && !order.contactId ? 280 : 56;
-                                const top = window.innerHeight - rect.bottom > estimatedHeight + 12
-                                  ? rect.bottom + 4
-                                  : Math.max(8, rect.top - estimatedHeight - 4);
+                                const top = Math.max(8, rect.top - estimatedHeight - 4);
                                 setMenuPosition({ top, right: Math.max(8, window.innerWidth - rect.right) });
                                 setActionOrderId(id);
                               }}
