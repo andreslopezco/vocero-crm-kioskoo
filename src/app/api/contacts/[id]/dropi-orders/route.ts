@@ -24,7 +24,7 @@ export const GET = withAuth(async (session, _req: Request, ctx: Params) => {
   const { id } = await ctx.params;
   const contact = await getContactById(session.organizationId, id);
   if (!contact) return apiError(404, "not_found", "Contacto no encontrado.");
-  return Response.json(await listDropiOrdersForContact(session.organizationId, id));
+  return Response.json({ ...(await listDropiOrdersForContact(session.organizationId, id)), canLink: canConfigure(session.role) });
 });
 
 export const POST = withAuth(async (session, req: Request, ctx: Params) => {
