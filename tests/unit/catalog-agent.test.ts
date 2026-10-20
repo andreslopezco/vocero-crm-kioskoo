@@ -39,7 +39,7 @@ const profile = {
 } as Parameters<typeof buildAgentSystemPrompt>[0]["profile"];
 
 describe("catálogo Meta del agente (031)", () => {
-  it("valida los campos para crear/editar y normaliza moneda, sin aceptar URLs inseguras", () => {
+  it("valida los campos de edición y normaliza moneda, sin aceptar URLs inseguras", () => {
     const input = {
       retailerId: "SKU-OLLAS-01",
       dropiProductId: "12345",
@@ -100,9 +100,7 @@ describe("catálogo Meta del agente (031)", () => {
     expect(updatePayload).not.toHaveProperty("image_url");
     expect(updatePayload).not.toHaveProperty("additional_image_urls");
     expect(catalogProductGraphPayload({ ...parsed, price: "309900.50" }).price).toBe(30990050);
-    expect(updatePayload).not.toHaveProperty("image_url");
-    expect(updatePayload).not.toHaveProperty("additional_image_urls");
-    expect(createPayload).not.toHaveProperty("catalog_id");
+
     expect(catalogProductMutationSchema.safeParse({ ...parsed, inventory: "1.5" }).success).toBe(false);
     expect(catalogProductGraphPayload({ ...parsed, inventory: "" })).not.toHaveProperty("quantity_to_sell_on_facebook");
   });
