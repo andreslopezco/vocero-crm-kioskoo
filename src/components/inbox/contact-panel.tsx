@@ -146,11 +146,6 @@ export function ContactPanel({
       setContactPhone(savedPhone);
       setPhoneDraft(savedPhone);
       setFicha(detail.contact?.ficha ?? {});
-      if (!editingPhone) {
-        const savedPhone = detail.contact?.phone ?? "";
-        setContactPhone(savedPhone);
-        setPhoneDraft(savedPhone);
-      }
       setCurrentStageId(detail.stage?.id ?? null);
       setLeadId(detail.lead?.id ?? null);
       setAnuncio(detail.anuncio ?? null);
@@ -172,13 +167,18 @@ export function ContactPanel({
       // conversación ocurre, y verla aparecer sola es justo para lo que sirve.
       // No pisa una edición a medias — el borrador vive dentro del panel.
       setFicha(detail.contact?.ficha ?? {});
+      if (!editingPhone) {
+        const savedPhone = detail.contact?.phone ?? "";
+        setContactPhone(savedPhone);
+        setPhoneDraft(savedPhone);
+      }
       setCurrentStageId(detail.stage?.id ?? null);
       setLeadId(detail.lead?.id ?? null);
       // La imagen del creativo se copia después de que entra el mensaje: este
       // refetch en vivo es lo que la hace aparecer sin recargar.
       setAnuncio(detail.anuncio ?? null);
     }
-  }, [contactId, loadBrain, loadDropiOrders]);
+  }, [contactId, editingPhone, loadBrain, loadDropiOrders]);
 
   useEffect(() => {
     setNotesLoaded(false);
