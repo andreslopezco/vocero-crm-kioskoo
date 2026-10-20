@@ -1,6 +1,6 @@
 import { apiError, withAuth } from "@/lib/api";
 import { dropiOrdersEnabled, dropiDisabledResponse } from "@/server/dropi/flag";
-import { dismissDropiOrder, DropiLinkError, listDropiOrders, refreshDropiOrders } from "@/server/dropi/linked-orders";
+import { assignDropiOrderToContact, dismissDropiOrder, DropiLinkError, listDropiOrders, refreshDropiOrders } from "@/server/dropi/linked-orders";
 
 export const dynamic = "force-dynamic";
 
@@ -40,5 +40,21 @@ export const DELETE = withAuth(async (session, request: Request) => {
     console.error("[orders] dismiss failed", error instanceof Error ? error.message : "unknown");
     const message = error instanceof DropiLinkError ? error.message : "No se pudo eliminar el pedido de Vocero.";
     return apiError(422, "order_dismiss_failed", message);
+  }
+});
+
+export const PATCH = withAuth(async (session, request: Request) => {
+  if (!dropiOrdersEnabled()) return dropiDisabledResponse();
+  try {
+    const body = await request.json().catch(() => null) as { orderId?: unknown; contactId?: unknown } | null;
+    if (!body || typeof body.orderId !== "string" || typeof body.contactId !== "string") {
+      return apiError(422, "invalid_assignment", "El pedido y el contacto son obligatorios.");
+    }
+    await assignDropiOrderToContact(session.organizationId, body.orderId, body.contactId);
+    return Response.json({ assigned: true });
+  } catch (error) {
+    console.error("[orders] contact assignment failed", error instanceof Error ? error.message : "unknown");
+    const message = error instanceof DropiLinkError ? error.message : "No se pudo asignar el pedido al contacto.";
+    return apiError(422, "order_assignment_failed", message);
   }
 });
