@@ -297,7 +297,7 @@ async function fetchSnapshot(organizationId: string): Promise<CatalogSnapshot> {
       .filter((row) => row !== null)
       .map((row) => {
         const dropiProductId = priorDropiIds.get(row.retailerId);
-        if (typeof dropiProductId !== "string" || !/^\\d+$/.test(dropiProductId)) return row;
+        if (typeof dropiProductId !== "string" || !/^[1-9]\d{0,23}$/.test(dropiProductId)) return row;
         return { ...row, attributes: { ...row.attributes, [LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE]: dropiProductId } };
       });
     await db.transaction(async (tx) => {
