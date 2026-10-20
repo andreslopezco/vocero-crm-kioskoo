@@ -1,6 +1,7 @@
 import { withAuth } from "@/lib/api";
 import { catalogDisabledResponse, catalogEnabled } from "@/server/catalog/flag";
 import { CatalogError, getCatalogSnapshot, syncCatalog } from "@/server/catalog/service";
+import { LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE, dropiProductIdFromAttributes } from "@/server/dropi/product-mapping";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,9 @@ export const GET = withAuth(async (session, req: Request) => {
     } : null,
     ...(snapshot && new URL(req.url).searchParams.get("products") === "1" ? {
       products: snapshot.products.map(({ retailerId, name, description, availability, price, currency, brand, imageUrl, url, attributes }) => ({
-        retailerId, name, description, availability, price, currency, brand, imageUrl, url, attributes,
+        retailerId, name, description, availability, price, currency, brand, imageUrl, url,
+        dropiProductId: dropiProductIdFromAttributes(attributes),
+        attributes: Object.fromEntries(Object.entries(attributes as Record<string, unknown>).filter(([key]) => key !== LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE)),
       })),
     } : {}),
   });

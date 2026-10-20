@@ -107,6 +107,7 @@ export type SettingsSection = {
 export function settingsSections({
   agenda = false,
   atribucion = false,
+  dropi = false,
   instagram = false,
   messenger = false,
   tiktok = false,
@@ -114,6 +115,7 @@ export function settingsSections({
   agenda?: boolean;
   /** 016 — "Anuncios" existe solo con la bandera ATRIBUCION. */
   atribucion?: boolean;
+  dropi?: boolean;
   /** 023 — "Instagram" solo si el canal está encendido con CHANNELS. */
   instagram?: boolean;
   /** 017 — "Messenger", igual. */
@@ -135,6 +137,7 @@ export function settingsSections({
   // #85 — el proveedor de IA se configura aquí; el entorno queda de respaldo.
   const agente: SettingsLink[] = [{ href: "/settings/ai", label: "IA" }];
   if (agenda) agente.push({ href: "/settings/calendar", label: "Agenda" });
+  if (dropi) agente.push({ href: "/settings/dropi", label: "Dropi" });
 
   const negocio: SettingsLink[] = [
     { href: "/settings/branding", label: "Marca" },

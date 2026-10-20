@@ -8,7 +8,7 @@ import {
   getContactStage,
   serializeContact,
 } from "@/server/contacts";
-import { upsertFicha } from "@/server/bot/ficha";
+import { phoneFromFicha, upsertFicha } from "@/server/bot/ficha";
 import { pauseConversations } from "@/server/contacts-import";
 import { cuentaComoAnuncio } from "@/lib/anuncios";
 import {
@@ -50,6 +50,7 @@ export const GET = withAuth(async (session, _req: Request, ctx: Params) => {
 
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
+  phone: z.string().trim().max(30).nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
   /** 027 — El agente no le responde a esta persona; se lleva a su conversación. */
   aiPaused: z.boolean().optional(),
@@ -85,6 +86,16 @@ export const PATCH = withAuth(async (session, req: Request, ctx: Params) => {
     set.name = body.data.name;
     // Lo escribio una persona: a partir de aqui WhatsApp ya no lo pisa (#51).
     set.nameSource = "manual";
+  }
+  if (body.data.phone !== undefined) {
+    const rawPhone = body.data.phone?.trim() ?? "";
+    const currentContact = await getContactById(session.organizationId, id);
+    const currentFicha = currentContact?.ficha && typeof currentContact.ficha === "object" && !Array.isArray(currentContact.ficha)
+      ? currentContact.ficha as Record<string, unknown>
+      : {};
+    const phone = rawPhone ? phoneFromFicha({ ...currentFicha, phone: rawPhone }) : null;
+    if (rawPhone && !phone) return apiError(400, "invalid_phone", "Escribe un número de teléfono válido.");
+    set.phone = phone;
   }
   if (body.data.notes !== undefined) set.notes = body.data.notes;
   if (body.data.archived !== undefined) {

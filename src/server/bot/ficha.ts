@@ -63,6 +63,90 @@ export function normalizeFicha(raw: FichaInput): Ficha {
   return out;
 }
 
+const PHONE_FIELD_KEYS = new Set([
+  "telefono",
+  "phone",
+  "celular",
+  "mobile",
+  "movil",
+  "numerodetelefono",
+  "numerocelular",
+  "whatsapp",
+  "whatsappphone",
+  "whatsappnumber",
+]);
+const COLOMBIAN_LOCATION_TERMS = [
+  "colombia", "bogota", "antioquia", "arauca", "atlantico", "amazonas",
+  "bolivar", "boyaca", "caldas", "caqueta", "casanare", "cauca", "cesar",
+  "choco", "cordoba", "cundinamarca", "guainia", "guaviare", "huila",
+  "laguajira", "magdalena", "meta", "narino", "nortedesantander", "putumayo",
+  "quindio", "risaralda", "sanandres", "santander", "sucre", "tolima",
+  "valledelcauca", "vaupes", "vichada", "medellin", "cali", "barranquilla",
+  "cartagena", "bucaramanga", "cucuta", "pereira", "manizales", "santamarta",
+  "ibague", "villavicencio", "pasto", "monteria", "valledupar", "neiva",
+  "armenia", "popayan", "sincelejo", "tunja", "floridablanca", "soacha",
+  "bello", "itagui", "envigado", "palmira", "buenaventura",
+];
+
+function normalizedFichaKey(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function fichaIndicatesColombia(raw: Record<string, unknown>): boolean {
+  const normalizedEntries = Object.entries(raw).map(([key, value]) => [
+    normalizedFichaKey(key),
+    typeof value === "string" ? normalizedFichaKey(value) : "",
+  ] as const);
+  const countryValues = normalizedEntries
+    .filter(([key]) => ["country", "countryname", "pais"].includes(key))
+    .map(([, value]) => value)
+    .filter(Boolean);
+  if (countryValues.length) {
+    return countryValues.some((value) => value === "co" || value === "col" || value.includes("colombia"));
+  }
+
+  const localityValues = normalizedEntries
+    .filter(([key]) => ["departamento", "department", "state", "ciudad", "city"].includes(key))
+    .map(([, value]) => value)
+    .filter(Boolean);
+  if (localityValues.some((value) => COLOMBIAN_LOCATION_TERMS.includes(value) ||
+    COLOMBIAN_LOCATION_TERMS.some((term) => term.length >= 5 && value.includes(term)))) {
+    return true;
+  }
+
+  const addressValues = normalizedEntries
+    .filter(([key]) => ["direccion", "address", "shippingaddress", "deliveryaddress"].includes(key))
+    .map(([, value]) => value)
+    .filter(Boolean);
+  return addressValues.some((value) =>
+    COLOMBIAN_LOCATION_TERMS.some((term) => term.length >= 6 && value.includes(term))
+  );
+}
+
+/**
+ * Obtiene el teléfono capturado y lo normaliza para el contacto principal.
+ * Para un celular colombiano local (10 dígitos, empieza por 3), agrega 57
+ * solo si país, ciudad, departamento o dirección indican Colombia.
+ */
+export function phoneFromFicha(raw: unknown): string | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const entries = Object.entries(record)
+    .filter(([rawKey]) => PHONE_FIELD_KEYS.has(normalizedFichaKey(rawKey)))
+    .sort(([a], [b]) => Number(normalizedFichaKey(b) === "phone") - Number(normalizedFichaKey(a) === "phone"));
+  for (const [, value] of entries) {
+    if (typeof value !== "string" && typeof value !== "number") continue;
+    const candidate = String(value).trim();
+    if (!candidate || !/^\+?[\d\s().-]+$/.test(candidate)) continue;
+    const digits = candidate.replace(/\D/g, "");
+    if (digits.length < 7 || digits.length > 15) continue;
+    if (digits.length === 10 && digits.startsWith("3") && fichaIndicatesColombia(record)) {
+      return "57" + digits;
+    }
+    return digits;
+  }
+  return null;
+}
 /** Merge campo a campo: lo ausente se conserva, `null` explícito borra. */
 export function mergeFicha(prev: Ficha | null | undefined, patch: Ficha): Ficha {
   const out: Ficha = { ...(prev ?? {}) };
@@ -103,7 +187,7 @@ export async function upsertFicha(input: {
   );
 
   const rows = await db
-    .select({ ficha: schema.contact.ficha })
+    .select({ ficha: schema.contact.ficha, phone: schema.contact.phone })
     .from(schema.contact)
     .where(alcance)
     .limit(1);
@@ -111,9 +195,16 @@ export async function upsertFicha(input: {
 
   const merged = mergeFicha(rows[0].ficha as Ficha | null, patch);
 
+  const update: Partial<typeof schema.contact.$inferInsert> = {
+    ficha: merged,
+    updatedAt: new Date(),
+  };
+  const capturedPhone = phoneFromFicha(merged);
+  if (!rows[0].phone && capturedPhone) update.phone = capturedPhone;
+
   await db
     .update(schema.contact)
-    .set({ ficha: merged, updatedAt: new Date() })
+    .set(update)
     .where(alcance);
 
   return { ficha: merged };

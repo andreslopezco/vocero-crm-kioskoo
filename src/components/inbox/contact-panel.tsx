@@ -5,6 +5,12 @@ import Link from "next/link";
 import {
   AlertTriangle,
   Cable,
+  Link2,
+  Loader2,
+  PackageCheck,
+  Pencil,
+  Unlink,
+  X,
   Check,
   ChevronRight,
   Sparkles,
@@ -33,6 +39,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { FichaPanel } from "@/components/ficha-panel";
 import { DeleteConversationDialog } from "./delete-conversation-dialog";
 
+type DropiOrderPanelItem = {
+  orderId: string; status: string | null; trackingCode: string | null;
+  total: string | null; currency: string | null;
+  items: { name: string; quantity: string | null }[];
+  updatedAt: string; source: "linked" | "vocero";
+};
 const HANDOFF_LABELS: Record<string, string> = {
   cliente: "El cliente pidió un humano",
   modelo: "El agente decidió escalar",
@@ -61,6 +73,11 @@ export function ContactPanel({
 }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [notes, setNotes] = useState("");
+  const [contactPhone, setContactPhone] = useState(conversation.contact.phone ?? "");
+  const [phoneDraft, setPhoneDraft] = useState(conversation.contact.phone ?? "");
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
   const [ficha, setFicha] = useState<FichaDto>({});
   const [notesLoaded, setNotesLoaded] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
@@ -73,6 +90,14 @@ export function ContactPanel({
   // toggle "Respondiendo" mentiría cuando el agente aún no se ha
   // configurado/encendido, y pediría la clave de IA aunque conteste Nea.
   const [brain, setBrain] = useState<BrainStatusDto | null>(null);
+  const [dropiPanelAvailable, setDropiPanelAvailable] = useState(false);
+  const [dropiConnected, setDropiConnected] = useState(false);
+  const [dropiCanLink, setDropiCanLink] = useState(false);
+  const [dropiOrders, setDropiOrders] = useState<DropiOrderPanelItem[]>([]);
+  const [dropiOrderId, setDropiOrderId] = useState("");
+  const [dropiLoading, setDropiLoading] = useState(false);
+  const [dropiError, setDropiError] = useState("");
+  const [dropiNotice, setDropiNotice] = useState("");
 
   const contactId = conversation.contact.id;
 
@@ -94,15 +119,32 @@ export function ContactPanel({
     if (b) setBrain(b);
   }, []);
 
+  const loadDropiOrders = useCallback(async () => {
+    const response = await fetch(`/api/contacts/${contactId}/dropi-orders`).catch(() => null);
+    if (!response?.ok) {
+      setDropiPanelAvailable(false);
+      return;
+    }
+    const data = await response.json().catch(() => null);
+    if (!data) return;
+    setDropiPanelAvailable(true);
+    setDropiConnected(Boolean(data.connected));
+    setDropiCanLink(Boolean(data.canLink));
+    setDropiOrders(Array.isArray(data.orders) ? data.orders : []);
+  }, [contactId]);
   // Carga inicial (incluye notas): se re-ejecuta al cambiar de contacto.
   const refetch = useCallback(async () => {
     void loadBrain();
+    void loadDropiOrders();
     const [detail, stagesRes] = await Promise.all([
       fetch(`/api/contacts/${contactId}`).then((r) => (r.ok ? r.json() : null)),
       fetch("/api/pipeline/stages").then((r) => (r.ok ? r.json() : null)),
     ]).catch(() => [null, null]);
     if (detail) {
       setNotes(detail.contact?.notes ?? "");
+      const savedPhone = detail.contact?.phone ?? "";
+      setContactPhone(savedPhone);
+      setPhoneDraft(savedPhone);
       setFicha(detail.contact?.ficha ?? {});
       setCurrentStageId(detail.stage?.id ?? null);
       setLeadId(detail.lead?.id ?? null);
@@ -110,12 +152,13 @@ export function ContactPanel({
     }
     if (stagesRes) setStages(stagesRes.stages);
     setNotesLoaded(true);
-  }, [contactId, loadBrain]);
+  }, [contactId, loadBrain, loadDropiOrders]);
 
   // Refetch en vivo (etapa/lead + quién responde) SIN tocar las notas, para
   // no pisar lo que el operador esté escribiendo. Lo dispara el SSE.
   const refreshLive = useCallback(async () => {
     void loadBrain();
+    void loadDropiOrders();
     const detail = await fetch(`/api/contacts/${contactId}`)
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
@@ -124,16 +167,24 @@ export function ContactPanel({
       // conversación ocurre, y verla aparecer sola es justo para lo que sirve.
       // No pisa una edición a medias — el borrador vive dentro del panel.
       setFicha(detail.contact?.ficha ?? {});
+      if (!editingPhone) {
+        const savedPhone = detail.contact?.phone ?? "";
+        setContactPhone(savedPhone);
+        setPhoneDraft(savedPhone);
+      }
       setCurrentStageId(detail.stage?.id ?? null);
       setLeadId(detail.lead?.id ?? null);
       // La imagen del creativo se copia después de que entra el mensaje: este
       // refetch en vivo es lo que la hace aparecer sin recargar.
       setAnuncio(detail.anuncio ?? null);
     }
-  }, [contactId, loadBrain]);
+  }, [contactId, editingPhone, loadBrain, loadDropiOrders]);
 
   useEffect(() => {
     setNotesLoaded(false);
+    setDropiOrderId("");
+    setDropiError("");
+    setDropiNotice("");
     // Al cambiar de contacto no puede asomarse el anuncio del anterior.
     setAnuncio(null);
     void refetch();
@@ -173,6 +224,28 @@ export function ContactPanel({
     void refreshLive();
   }
 
+  async function saveContactPhone() {
+    setSavingPhone(true);
+    setPhoneError("");
+    const response = await fetch(`/api/contacts/${contactId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ phone: phoneDraft }),
+    }).catch(() => null);
+    const data = await response?.json().catch(() => null);
+    if (!response?.ok) {
+      setPhoneError(data?.message ?? data?.error?.message ?? "No se pudo guardar el teléfono.");
+      setSavingPhone(false);
+      return;
+    }
+    const savedPhone = data?.contact?.phone ?? "";
+    setContactPhone(savedPhone);
+    setPhoneDraft(savedPhone);
+    setEditingPhone(false);
+    setSavingPhone(false);
+    void loadDropiOrders();
+  }
+
   async function saveNotes() {
     setSavingNotes(true);
     await fetch(`/api/contacts/${contactId}`, {
@@ -183,6 +256,34 @@ export function ContactPanel({
     setSavingNotes(false);
   }
 
+  async function linkDropiOrder() {
+    if (!dropiOrderId.trim()) return;
+    setDropiLoading(true); setDropiError(""); setDropiNotice("");
+    const response = await fetch(`/api/contacts/${contactId}/dropi-orders`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ orderId: dropiOrderId.trim() }),
+    }).catch(() => null);
+    const data = await response?.json().catch(() => null);
+    if (!response?.ok) {
+      setDropiError(data?.message ?? data?.error?.message ?? "No se pudo vincular el pedido.");
+    } else {
+      setDropiOrderId("");
+      setDropiNotice("Pedido vinculado; la IA ya puede usar su información.");
+      await loadDropiOrders();
+    }
+    setDropiLoading(false);
+  }
+
+  async function unlinkDropiOrder(orderId: string) {
+    setDropiError("");
+    const response = await fetch(`/api/contacts/${contactId}/dropi-orders`, {
+      method: "DELETE", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ orderId }),
+    }).catch(() => null);
+    if (!response?.ok) { setDropiError("No se pudo desvincular el pedido."); return; }
+    setDropiNotice("Pedido desvinculado.");
+    await loadDropiOrders();
+  }
   const currentIndex = stages.findIndex((s) => s.id === currentStageId);
 
   return (
@@ -209,13 +310,55 @@ export function ContactPanel({
               seed={conversation.contact.id}
               size="md"
             />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-bold tracking-tight">
                 {conversation.contact.name}
               </p>
-              <p className="text-xs text-text-3">
-                {formatPhone(conversation.contact.phone)}
-              </p>
+              {editingPhone ? (
+                <form
+                  className="mt-1 flex items-center gap-1.5"
+                  onSubmit={(event) => { event.preventDefault(); void saveContactPhone(); }}
+                >
+                  <input
+                    aria-label="Teléfono principal"
+                    autoFocus
+                    value={phoneDraft}
+                    onChange={(event) => setPhoneDraft(event.target.value)}
+                    placeholder="Ej. +57 310 230 7059"
+                    className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <button
+                    type="submit"
+                    aria-label="Guardar teléfono"
+                    disabled={savingPhone}
+                    className="rounded p-1.5 text-brand hover:bg-accent disabled:opacity-50"
+                  >
+                    {savingPhone ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Cancelar edición del teléfono"
+                    disabled={savingPhone}
+                    onClick={() => { setEditingPhone(false); setPhoneDraft(contactPhone); setPhoneError(""); }}
+                    className="rounded p-1.5 text-text-3 hover:bg-accent disabled:opacity-50"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </form>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <p className="text-xs text-text-3">{formatPhone(contactPhone)}</p>
+                  <button
+                    type="button"
+                    aria-label="Editar teléfono principal"
+                    onClick={() => { setPhoneDraft(contactPhone); setPhoneError(""); setEditingPhone(true); }}
+                    className="rounded p-1 text-text-3 hover:bg-accent hover:text-foreground"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+              {phoneError && <p className="mt-1 text-[11px] text-danger-text">{phoneError}</p>}
             </div>
           </div>
 
@@ -334,6 +477,72 @@ export function ContactPanel({
           )}
         </section>
 
+        {dropiPanelAvailable && (
+          <section className="border-b p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-soft text-brand-text">
+                  <PackageCheck className="h-4 w-4" strokeWidth={1.7} />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold">Pedidos Dropi</p>
+                  <p className="text-[11px] text-text-3">{dropiOrders.length} {dropiOrders.length === 1 ? "pedido vinculado" : "pedidos vinculados"}</p>
+                </div>
+              </div>
+              <span className={cn("rounded-full px-2 py-1 text-[10px] font-medium", dropiConnected ? "bg-brand-soft text-brand-text" : "bg-warning-tint text-warning-text")}>
+                {dropiConnected ? "Conectado" : "Sin conexión"}
+              </span>
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-text-3">
+              Vincula un pedido existente por su ID. La IA podrá usar su estado y guía como contexto.
+            </p>
+            {dropiConnected && dropiCanLink ? (
+              <form className="mt-3 flex gap-2" onSubmit={(event) => { event.preventDefault(); void linkDropiOrder(); }}>
+                <input
+                  aria-label="ID del pedido en Dropi"
+                  placeholder="ID del pedido en Dropi"
+                  value={dropiOrderId}
+                  onChange={(event) => setDropiOrderId(event.target.value)}
+                  className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  maxLength={100}
+                />
+                <Button size="sm" type="submit" disabled={dropiLoading || !dropiOrderId.trim()} className="shrink-0">
+                  {dropiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" strokeWidth={1.8} />}
+                  <span className="ml-1">Vincular</span>
+                </Button>
+              </form>
+            ) : dropiConnected ? (
+              <p className="mt-2 text-[11px] text-text-3">Solo un propietario o administrador puede vincular o desvincular pedidos.</p>
+            ) : (
+              <Link href="/settings/dropi" className="mt-2 inline-flex text-xs font-medium text-brand-text underline underline-offset-2">Conectar Dropi →</Link>
+            )}
+            {dropiError && <p role="alert" className="mt-2 text-xs text-danger-text">{dropiError}</p>}
+            {dropiNotice && <p role="status" className="mt-2 text-xs text-success-text">{dropiNotice}</p>}
+            {dropiOrders.length > 0 && (
+              <ul className="mt-3 space-y-2">
+                {dropiOrders.map((order) => (
+                  <li key={order.orderId} className="rounded-md border bg-subtle p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold">Pedido {order.orderId}</p>
+                        <p className="mt-0.5 text-[11px] text-text-2">{order.status ?? "Estado no disponible"}</p>
+                      </div>
+                      {order.source === "linked" && (
+                        <button type="button" aria-label={`Desvincular pedido ${order.orderId}`} onClick={() => void unlinkDropiOrder(order.orderId)} className="rounded p-1 text-text-3 hover:bg-accent hover:text-danger-text">
+                          <Unlink className="h-3.5 w-3.5" strokeWidth={1.7} />
+                        </button>
+                      )}
+                    </div>
+                    {order.items.length > 0 && <p className="mt-2 line-clamp-2 text-[11px] text-text-3">{order.items.map((item) => `${item.name}${item.quantity ? ` × ${item.quantity}` : ""}`).join(", ")}</p>}
+                    {order.trackingCode && <p className="mt-1 text-[11px] text-text-2">Guía: <span className="font-medium">{order.trackingCode}</span></p>}
+                    {order.total && <p className="mt-1 text-[11px] text-text-2">Total: {order.total} {order.currency ?? ""}</p>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+
         {/* Stepper de etapa */}
         {stages.length > 0 && leadId && (
           <section className="border-b p-4">
@@ -379,6 +588,7 @@ export function ContactPanel({
             </ol>
           </section>
         )}
+
 
         {/* Ficha: lo que se SABE del lead. Va antes de Notas —lo que alguien
             OPINA— porque es lo que se consulta a mitad de una conversación. */}

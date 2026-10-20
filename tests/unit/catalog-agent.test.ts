@@ -42,6 +42,7 @@ describe("catálogo Meta del agente (031)", () => {
   it("valida los campos para crear/editar y normaliza moneda, sin aceptar URLs inseguras", () => {
     const input = {
       retailerId: "SKU-OLLAS-01",
+      dropiProductId: "12345",
       name: "Set de ollas",
       description: "Acero inoxidable",
       availability: "in stock",
@@ -59,7 +60,12 @@ describe("catálogo Meta del agente (031)", () => {
     };
     const parsed = catalogProductMutationSchema.safeParse(input);
     expect(parsed.success).toBe(true);
-    if (parsed.success) expect(parsed.data.currency).toBe("COP");
+    if (parsed.success) {
+      expect(parsed.data.currency).toBe("COP");
+      expect(parsed.data.dropiProductId).toBe("12345");
+    }
+    expect(catalogProductMutationSchema.safeParse({ ...input, dropiProductId: "SKU-OLLAS-01" }).success).toBe(false);
+    expect(catalogProductMutationSchema.safeParse({ ...input, dropiProductId: "0" }).success).toBe(false);
     expect(catalogProductMutationSchema.safeParse({ ...input, imageUrls: ["https://cdn.example.com/olla.jpg"] }).data).not.toHaveProperty("imageUrls");
     expect(catalogProductMutationSchema.safeParse({ ...input, url: "https://user:password@tienda.example.com" }).success).toBe(false);
     expect(catalogProductMutationSchema.safeParse({ ...input, price: "0" }).success).toBe(false);
@@ -125,6 +131,28 @@ describe("catálogo Meta del agente (031)", () => {
     const small = new Uint8Array(png);
     new DataView(small.buffer).setUint32(16, 499);
     expect(() => validateCatalogImage(small, "image/png")).toThrow("500 × 500");
+  });
+
+  it("el prompt de pedidos exige el mapeo local y no permite confirmar sin crear", () => {
+    const prompt = buildAgentSystemPrompt({
+      profile,
+      kb: [],
+      stages: [{ name: "Interesado" }],
+      dropi: {
+        rateType: "CON RECAUDO",
+        orderCreationEnabled: true,
+        tools: [{ name: "create_order", inputSchema: { type: "object" } }],
+        productData: "id: 12345, name: Bolso de cuero",
+        catalogProducts: [{ retailerId: "SKU-01", name: "Bolso de cuero", dropiProductId: "12345", price: "120000", currency: "COP" }],
+      },
+    });
+    expect(prompt).toContain("12345");
+    expect(prompt).toContain("products[].id");
+    expect(prompt).toContain("Nunca confirmes el pedido al cliente");
+    expect(prompt).toContain("DEBES invocar create_dropi_order en este turno");
+    expect(prompt).toContain("solicitud pendiente para revisión humana");
+    expect(prompt).toContain("price y currency del producto local vinculado");
+    expect(prompt).not.toContain("move_stage a la etapa de interesados y confirma al cliente");
   });
 
   it("la bandera está apagada por omisión y solo acepta valores explícitos", () => {

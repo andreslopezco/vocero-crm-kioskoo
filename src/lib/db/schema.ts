@@ -1231,6 +1231,120 @@ export const aiCredentials = pgTable(
   (t) => [uniqueIndex("ai_credentials_org_uq").on(t.organizationId)]
 );
 
+/**
+ * Conexión OAuth al MCP oficial de Dropi (solo se consulta desde el servidor).
+ * El documento OAuth completo —registro dinámico, tokens y discovery— se
+ * cifra como una sola unidad con ENCRYPTION_KEY.
+ */
+export const dropiCredentials = pgTable(
+  "dropi_credentials",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    oauthCipher: text("oauth_cipher").notNull(),
+    oauthIv: text("oauth_iv").notNull(),
+    oauthTag: text("oauth_tag").notNull(),
+    status: text("status", { enum: ["connected", "error"] })
+      .notNull()
+      .default("connected"),
+    lastError: text("last_error"),
+    rateType: text("rate_type", { enum: ["CON RECAUDO", "SIN RECAUDO"] }),
+    /** Apagado hasta que el dueño valide el estado inicial de Dropi. */
+    orderCreationEnabled: boolean("order_creation_enabled")
+      .notNull()
+      .default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("dropi_credentials_org_uq").on(t.organizationId)]
+);
+
+/** State OAuth breve, one-time y cifrado; las credenciales durables van arriba. */
+export const dropiOAuthFlow = pgTable(
+  "dropi_oauth_flow",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    actorUserId: text("actor_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    stateHash: text("state_hash").notNull(),
+    flowCipher: text("flow_cipher").notNull(),
+    flowIv: text("flow_iv").notNull(),
+    flowTag: text("flow_tag").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    consumedAt: timestamp("consumed_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("dropi_oauth_flow_org_idx").on(t.organizationId, t.expiresAt)]
+);
+
+/** Registro idempotente de creación/reconciliación en el proveedor. */
+export const dropiOrderSubmission = pgTable(
+  "dropi_order_submission",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversation.id, { onDelete: "cascade" }),
+    contactId: text("contact_id")
+      .notNull()
+      .references(() => contact.id, { onDelete: "cascade" }),
+    shopOrderId: text("shop_order_id").notNull(),
+    providerOrderId: text("provider_order_id"),
+    providerStatus: text("provider_status"),
+    status: text("status", {
+      enum: ["submitting", "submitted", "unknown", "failed", "needs_review"],
+    })
+      .notNull()
+      .default("submitting"),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("dropi_order_submission_org_shop_id_uq").on(
+      t.organizationId,
+      t.shopOrderId
+    ),
+    index("dropi_order_submission_org_conversation_idx").on(
+      t.organizationId,
+      t.conversationId,
+      t.createdAt
+    ),
+  ]
+);
+
+
+/** Órdenes existentes de Dropi vinculadas manualmente a un contacto. */
+export const dropiOrderLink = pgTable(
+  "dropi_order_link",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    contactId: text("contact_id")
+      .notNull()
+      .references(() => contact.id, { onDelete: "cascade" }),
+    providerOrderId: text("provider_order_id").notNull(),
+    snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("dropi_order_link_org_order_uq").on(t.organizationId, t.providerOrderId),
+    index("dropi_order_link_org_contact_idx").on(t.organizationId, t.contactId, t.createdAt),
+  ]
+);
 /* ============================================================
  * 021 — Despacho al cerebro
  * ============================================================ */

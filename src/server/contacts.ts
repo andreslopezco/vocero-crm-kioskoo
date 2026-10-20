@@ -3,6 +3,7 @@ import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
 import { effectiveSource } from "@/server/contact-source";
 import type { FichaDto, PriorityValue } from "@/lib/types";
+import { phoneFromFicha } from "@/server/bot/ficha";
 
 export function serializeContact(
   c: typeof schema.contact.$inferSelect,
@@ -14,7 +15,7 @@ export function serializeContact(
   return {
     id: c.id,
     name: c.name,
-    phone: c.phone,
+    phone: c.phone ?? phoneFromFicha(c.ficha),
     notes: c.notes,
     aiPaused: c.aiPaused,
     stageName,

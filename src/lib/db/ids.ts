@@ -33,6 +33,10 @@ const prefixes = {
   capiSettings: "capi",
   // Ajustes → IA (issue #85)
   aiCredentials: "aicred",
+  dropiCredentials: "dcred",
+  dropiOAuthFlow: "doauth",
+  dropiOrderSubmission: "dorder",
+  dropiOrderLink: "dlink",
   // 021 — despacho al cerebro
   dispatch: "dsp",
   // 026 — el aviso de que una conversación se eliminó
