@@ -21,7 +21,7 @@ export type DropiLinkedOrder = {
 };
 
 function normalizedKey(value: string) {
-  return value.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function findValue(value: unknown, keys: string[]): unknown {
@@ -71,14 +71,52 @@ function textValue(value: unknown): string | null {
 }
 
 function normalizedPhone(value: string | null | undefined) {
-  let digits = (value ?? "").replace(/\\D/g, "");
+  let digits = (value ?? "").replace(/\D/g, "");
   if (digits.startsWith("57") && digits.length === 12) digits = digits.slice(2);
   return digits;
 }
 
-function decodeOrder(result: { content: Array<{ type: string; text?: string }> }): unknown {
-  const text = result.content.filter((part) => part.type === "text").map((part) => part.text ?? "").join("\\n").trim();
-  try { return JSON.parse(text) as unknown; } catch { throw new DropiLinkError("Dropi devolvió una respuesta de pedido que no se pudo interpretar.", "invalid_response"); }
+function decodeOrder(result: {
+  content?: Array<{ type: string; text?: string }>;
+  structuredContent?: unknown;
+  isError?: boolean;
+}): unknown {
+  if (result.isError) throw new DropiLinkError("Dropi no pudo encontrar o consultar ese pedido.", "provider_error");
+
+  const parseJson = (candidate: string): unknown | undefined => {
+    const trimmed = candidate.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+    const candidates = [trimmed, trimmed.match(/[\[{][\s\S]*[\]}]/)?.[0]];
+    for (const value of candidates) {
+      if (!value) continue;
+      try {
+        const parsed: unknown = JSON.parse(value);
+        if (typeof parsed === "string") {
+          try { return JSON.parse(parsed) as unknown; } catch { /* try another representation */ }
+        } else {
+          return parsed;
+        }
+      } catch { /* try the next representation */ }
+    }
+    return undefined;
+  };
+
+  if (result.structuredContent !== undefined && result.structuredContent !== null) {
+    if (typeof result.structuredContent !== "string") return result.structuredContent;
+    const parsed = parseJson(result.structuredContent);
+    if (parsed !== undefined) return parsed;
+  }
+
+  const text = (result.content ?? [])
+    .filter((part) => part.type === "text")
+    .map((part) => part.text ?? "")
+    .filter(Boolean);
+  for (const part of text) {
+    const parsed = parseJson(part);
+    if (parsed !== undefined) return parsed;
+  }
+  const parsedCombined = parseJson(text.join("\n"));
+  if (parsedCombined !== undefined) return parsedCombined;
+  throw new DropiLinkError("Dropi devolvió una respuesta de pedido que no se pudo interpretar.", "invalid_response");
 }
 
 function summaryFromOrder(orderId: string, data: unknown, source: DropiLinkedOrder["source"]): DropiLinkedOrder {
