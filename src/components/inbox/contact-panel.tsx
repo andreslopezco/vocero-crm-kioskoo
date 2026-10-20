@@ -398,52 +398,6 @@ export function ContactPanel({
           )}
         </section>
 
-        {/* Stepper de etapa */}
-        {stages.length > 0 && leadId && (
-          <section className="border-b p-4">
-            <p className="kicker mb-3">Etapa del pipeline</p>
-            <ol>
-              {stages.map((s, i) => {
-                const done = currentIndex >= 0 && i < currentIndex;
-                const current = s.id === currentStageId;
-                return (
-                  <li key={s.id} className="relative flex gap-3 pb-4 last:pb-0">
-                    {i < stages.length - 1 && (
-                      <span
-                        className={cn(
-                          "absolute left-[7px] top-4 h-full w-px",
-                          done ? "bg-brand" : "bg-border-strong"
-                        )}
-                      />
-                    )}
-                    <button
-                      onClick={() => void moveToStage(s.id)}
-                      aria-label={`Mover a ${s.name}`}
-                      className={cn(
-                        "relative z-10 mt-0.5 flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full transition-colors",
-                        done && "bg-brand text-brand-fg",
-                        current && "bg-brand ring-4 ring-brand-soft",
-                        !done && !current && "border border-border-strong bg-background hover:border-brand"
-                      )}
-                    >
-                      {done && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
-                    </button>
-                    <button
-                      onClick={() => void moveToStage(s.id)}
-                      className={cn(
-                        "text-left text-[13px]",
-                        current ? "font-[650] text-brand-text" : "text-text-2 hover:text-foreground"
-                      )}
-                    >
-                      {s.name}
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
-        )}
-
         {dropiPanelAvailable && (
           <section className="border-b p-4">
             <div className="flex items-center justify-between gap-2">
@@ -453,7 +407,7 @@ export function ContactPanel({
                 </span>
                 <div className="min-w-0">
                   <p className="text-[13px] font-semibold">Pedidos Dropi</p>
-                  <p className="text-[11px] text-text-3">{dropiOrders.length} vinculados a este contacto</p>
+                  <p className="text-[11px] text-text-3">{dropiOrders.length} {dropiOrders.length === 1 ? "pedido vinculado" : "pedidos vinculados"}</p>
                 </div>
               </div>
               <span className={cn("rounded-full px-2 py-1 text-[10px] font-medium", dropiConnected ? "bg-success-tint text-success-text" : "bg-warning-tint text-warning-text")}>
@@ -508,7 +462,53 @@ export function ContactPanel({
               </ul>
             )}
           </section>
+        )}        {/* Stepper de etapa */}
+        {stages.length > 0 && leadId && (
+          <section className="border-b p-4">
+            <p className="kicker mb-3">Etapa del pipeline</p>
+            <ol>
+              {stages.map((s, i) => {
+                const done = currentIndex >= 0 && i < currentIndex;
+                const current = s.id === currentStageId;
+                return (
+                  <li key={s.id} className="relative flex gap-3 pb-4 last:pb-0">
+                    {i < stages.length - 1 && (
+                      <span
+                        className={cn(
+                          "absolute left-[7px] top-4 h-full w-px",
+                          done ? "bg-brand" : "bg-border-strong"
+                        )}
+                      />
+                    )}
+                    <button
+                      onClick={() => void moveToStage(s.id)}
+                      aria-label={`Mover a ${s.name}`}
+                      className={cn(
+                        "relative z-10 mt-0.5 flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full transition-colors",
+                        done && "bg-brand text-brand-fg",
+                        current && "bg-brand ring-4 ring-brand-soft",
+                        !done && !current && "border border-border-strong bg-background hover:border-brand"
+                      )}
+                    >
+                      {done && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+                    </button>
+                    <button
+                      onClick={() => void moveToStage(s.id)}
+                      className={cn(
+                        "text-left text-[13px]",
+                        current ? "font-[650] text-brand-text" : "text-text-2 hover:text-foreground"
+                      )}
+                    >
+                      {s.name}
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
         )}
+
+
         {/* Ficha: lo que se SABE del lead. Va antes de Notas —lo que alguien
             OPINA— porque es lo que se consulta a mitad de una conversación. */}
         <FichaPanel ficha={ficha} onSave={saveFicha} />
