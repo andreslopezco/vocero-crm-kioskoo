@@ -5,6 +5,7 @@ import {
   AlertCircle,
   MoreHorizontal,
   PackageCheck,
+  RotateCcw,
   RefreshCw,
   Search,
   Trash2,
@@ -34,7 +35,7 @@ type Order = {
   source: "linked" | "vocero" | "dropi";
 };
 
-type OrdersResponse = { connected: boolean; orders: Order[] };
+type OrdersResponse = { connected: boolean; orders: Order[]; deletedOrders?: Order[] };
 type ContactOption = { id: string; name: string; phone: string | null };
 
 function statusText(value: string | null) {
@@ -127,6 +128,8 @@ export function OrdersClient() {
   const [contactOptions, setContactOptions] = useState<ContactOption[]>([]);
   const [contactLookupBusy, setContactLookupBusy] = useState(false);
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
+  const [restoringOrderId, setRestoringOrderId] = useState<string | null>(null);
+  const [showDeleted, setShowDeleted] = useState(false);
 
   const load = useCallback(async (quiet = false) => {
     if (quiet) setRefreshing(true);
@@ -193,13 +196,14 @@ export function OrdersClient() {
     };
   }, [assignmentOrderId, contactQuery]);
 
+  const sourceOrders = showDeleted ? data?.deletedOrders ?? [] : data?.orders ?? [];
   const orders = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("es");
-    return (data?.orders ?? []).filter((order) => {
+    return sourceOrders.filter((order) => {
       if (normalized && !searchText(order).includes(normalized)) return false;
       return true;
     });
-  }, [data, query]);
+  }, [sourceOrders, query]);
 
   const needsReview = (data?.orders ?? []).filter((order) =>
     /review|unknown|submitt|pending/i.test(order.status ?? "")
@@ -224,6 +228,28 @@ export function OrdersClient() {
       setError(cause instanceof Error ? cause.message : "No se pudo eliminar el pedido de Vocero.");
     } finally {
       setDeletingOrderId(null);
+    }
+  }
+
+  async function restoreOrder(order: Order) {
+    const orderId = order.providerOrderId ?? order.shopOrderId ?? order.orderId;
+    setRestoringOrderId(orderId);
+    setError(null);
+    try {
+      const response = await fetch("/api/orders", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+      const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+      if (!response.ok) throw new Error(body?.error?.message ?? "No se pudo restaurar el pedido.");
+      setActionOrderId(null);
+      setNotice("El pedido " + orderId + " volvió a mostrarse en Vocero.");
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudo restaurar el pedido.");
+    } finally {
+      setRestoringOrderId(null);
     }
   }
 
@@ -296,8 +322,11 @@ export function OrdersClient() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-2" role="group" aria-label="Pedidos">
-              <Button type="button" size="sm" variant="secondary" aria-pressed="true">
-                Todos
+              <Button type="button" size="sm" variant={!showDeleted ? "secondary" : "ghost"} aria-pressed={!showDeleted} onClick={() => { setShowDeleted(false); setActionOrderId(null); }}>
+                Todos <span className="ml-1 text-text-3">{data?.orders.length ?? 0}</span>
+              </Button>
+              <Button type="button" size="sm" variant={showDeleted ? "secondary" : "ghost"} aria-pressed={showDeleted} onClick={() => { setShowDeleted(true); setActionOrderId(null); }}>
+                Eliminados <span className="ml-1 text-text-3">{data?.deletedOrders?.length ?? 0}</span>
               </Button>
             </div>
 
@@ -404,6 +433,19 @@ export function OrdersClient() {
                                 role="menu"
                                 className={`absolute right-0 z-30 rounded-md border bg-card p-1 shadow-lg ${assignmentOrderId === (order.providerOrderId ?? order.shopOrderId ?? order.orderId) ? "w-64" : "min-w-44"} ${index === 0 ? "top-full mt-1" : "bottom-full mb-1"}`}
                               >
+                                {showDeleted ? (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    disabled={restoringOrderId !== null}
+                                    onClick={() => void restoreOrder(order)}
+                                    className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-subtle disabled:opacity-50"
+                                  >
+                                    <RotateCcw className="h-4 w-4" />
+                                    Restaurar en CRM
+                                  </button>
+                                ) : (
+                                  <>
                                 {order.source === "dropi" && !order.contactId && (
                                   <>
                                     <button
@@ -466,6 +508,8 @@ export function OrdersClient() {
                                   <Trash2 className="h-4 w-4" />
                                   Eliminar del CRM
                                 </button>
+                                  </>
+                                )}
                               </div>
                             )}
                           </div>
@@ -478,9 +522,9 @@ export function OrdersClient() {
             ) : (
               <div className="rounded-lg border border-dashed p-8 text-center">
                 <PackageCheck className="mx-auto h-8 w-8 text-text-3" />
-                <p className="mt-3 text-sm font-semibold">{data?.orders.length ? "No hay pedidos con esos filtros" : "Aún no hay pedidos"}</p>
+                <p className="mt-3 text-sm font-semibold">{sourceOrders.length ? "No hay pedidos con esos filtros" : showDeleted ? "No hay pedidos eliminados" : "Aún no hay pedidos"}</p>
                 <p className="mx-auto mt-1 max-w-md text-sm text-text-2">
-                  {data?.orders.length ? "Prueba otra búsqueda o cambia el filtro." : "Cuando Vocero prepare un pedido o vincules uno de Dropi a un contacto, aparecerá aquí."}
+                  {sourceOrders.length ? "Prueba otra búsqueda o cambia el filtro." : showDeleted ? "Los pedidos que elimines del CRM aparecerán aquí y podrás restaurarlos." : "Cuando Vocero prepare un pedido o vincules uno de Dropi a un contacto, aparecerá aquí."}
                 </p>
               </div>
             )}
