@@ -8,7 +8,9 @@ import {
   Link2,
   Loader2,
   PackageCheck,
+  Pencil,
   Unlink,
+  X,
   Check,
   ChevronRight,
   Sparkles,
@@ -71,6 +73,11 @@ export function ContactPanel({
 }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [notes, setNotes] = useState("");
+  const [contactPhone, setContactPhone] = useState(conversation.contact.phone ?? "");
+  const [phoneDraft, setPhoneDraft] = useState(conversation.contact.phone ?? "");
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
   const [ficha, setFicha] = useState<FichaDto>({});
   const [notesLoaded, setNotesLoaded] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
@@ -135,7 +142,15 @@ export function ContactPanel({
     ]).catch(() => [null, null]);
     if (detail) {
       setNotes(detail.contact?.notes ?? "");
+      const savedPhone = detail.contact?.phone ?? "";
+      setContactPhone(savedPhone);
+      setPhoneDraft(savedPhone);
       setFicha(detail.contact?.ficha ?? {});
+      if (!editingPhone) {
+        const savedPhone = detail.contact?.phone ?? "";
+        setContactPhone(savedPhone);
+        setPhoneDraft(savedPhone);
+      }
       setCurrentStageId(detail.stage?.id ?? null);
       setLeadId(detail.lead?.id ?? null);
       setAnuncio(detail.anuncio ?? null);
@@ -209,6 +224,28 @@ export function ContactPanel({
     void refreshLive();
   }
 
+  async function saveContactPhone() {
+    setSavingPhone(true);
+    setPhoneError("");
+    const response = await fetch(`/api/contacts/${contactId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ phone: phoneDraft }),
+    }).catch(() => null);
+    const data = await response?.json().catch(() => null);
+    if (!response?.ok) {
+      setPhoneError(data?.message ?? data?.error?.message ?? "No se pudo guardar el teléfono.");
+      setSavingPhone(false);
+      return;
+    }
+    const savedPhone = data?.contact?.phone ?? "";
+    setContactPhone(savedPhone);
+    setPhoneDraft(savedPhone);
+    setEditingPhone(false);
+    setSavingPhone(false);
+    void loadDropiOrders();
+  }
+
   async function saveNotes() {
     setSavingNotes(true);
     await fetch(`/api/contacts/${contactId}`, {
@@ -273,13 +310,55 @@ export function ContactPanel({
               seed={conversation.contact.id}
               size="md"
             />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-bold tracking-tight">
                 {conversation.contact.name}
               </p>
-              <p className="text-xs text-text-3">
-                {formatPhone(conversation.contact.phone)}
-              </p>
+              {editingPhone ? (
+                <form
+                  className="mt-1 flex items-center gap-1.5"
+                  onSubmit={(event) => { event.preventDefault(); void saveContactPhone(); }}
+                >
+                  <input
+                    aria-label="Teléfono principal"
+                    autoFocus
+                    value={phoneDraft}
+                    onChange={(event) => setPhoneDraft(event.target.value)}
+                    placeholder="Agregar teléfono"
+                    className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <button
+                    type="submit"
+                    aria-label="Guardar teléfono"
+                    disabled={savingPhone}
+                    className="rounded p-1.5 text-brand hover:bg-accent disabled:opacity-50"
+                  >
+                    {savingPhone ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Cancelar edición del teléfono"
+                    disabled={savingPhone}
+                    onClick={() => { setEditingPhone(false); setPhoneDraft(contactPhone); setPhoneError(""); }}
+                    className="rounded p-1.5 text-text-3 hover:bg-accent disabled:opacity-50"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </form>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <p className="text-xs text-text-3">{formatPhone(contactPhone)}</p>
+                  <button
+                    type="button"
+                    aria-label="Editar teléfono principal"
+                    onClick={() => { setPhoneDraft(contactPhone); setPhoneError(""); setEditingPhone(true); }}
+                    className="rounded p-1 text-text-3 hover:bg-accent hover:text-foreground"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+              {phoneError && <p className="mt-1 text-[11px] text-danger-text">{phoneError}</p>}
             </div>
           </div>
 
