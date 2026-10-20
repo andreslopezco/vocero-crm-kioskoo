@@ -92,6 +92,27 @@ export async function callDropiTool(organizationId: string, name: string, args: 
   return withDropiClient(organizationId, (client) => client.callTool({ name, arguments: args }));
 }
 
+export async function callDropiTools(
+  organizationId: string,
+  name: string,
+  argsList: Array<Record<string, unknown>>
+): Promise<Array<CallToolResult | null>> {
+  return withDropiClient(organizationId, async (client) => {
+    const tools = (await client.listTools()).tools;
+    if (!tools.some((tool) => tool.name === name)) throw new Error(`Dropi no expone la herramienta ${name}.`);
+    const results: Array<CallToolResult | null> = [];
+    for (const args of argsList) {
+      try {
+        results.push(await client.callTool({ name, arguments: args }));
+      } catch {
+        // Un pedido sin detalle no debe impedir la sincronización de los demás.
+        results.push(null);
+      }
+    }
+    return results;
+  });
+}
+
 export async function callDropiToolPages(
   organizationId: string,
   name: string,
