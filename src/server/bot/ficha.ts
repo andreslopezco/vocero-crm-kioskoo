@@ -97,16 +97,34 @@ function normalizedFichaKey(value: string) {
 }
 
 function fichaIndicatesColombia(raw: Record<string, unknown>): boolean {
-  const locations = Object.entries(raw)
-    .filter(([key]) => COLOMBIAN_LOCATION_KEYS.has(normalizedFichaKey(key)))
-    .map(([, value]) => typeof value === "string" ? normalizedFichaKey(value) : "")
+  const normalizedEntries = Object.entries(raw).map(([key, value]) => [
+    normalizedFichaKey(key),
+    typeof value === "string" ? normalizedFichaKey(value) : "",
+  ] as const);
+  const countryValues = normalizedEntries
+    .filter(([key]) => ["country", "countryname", "pais"].includes(key))
+    .map(([, value]) => value)
     .filter(Boolean);
-  const country = Object.entries(raw)
-    .filter(([key]) => ["country", "countryname", "pais"].includes(normalizedFichaKey(key)))
-    .map(([, value]) => typeof value === "string" ? normalizedFichaKey(value) : "");
-  if (country.some((value) => value === "co" || value === "col" || value.includes("colombia"))) return true;
-  const locationText = locations.join(" ");
-  return COLOMBIAN_LOCATION_TERMS.some((term) => locationText.includes(term));
+  if (countryValues.length) {
+    return countryValues.some((value) => value === "co" || value === "col" || value.includes("colombia"));
+  }
+
+  const localityValues = normalizedEntries
+    .filter(([key]) => ["departamento", "department", "state", "ciudad", "city"].includes(key))
+    .map(([, value]) => value)
+    .filter(Boolean);
+  if (localityValues.some((value) => COLOMBIAN_LOCATION_TERMS.includes(value) ||
+    COLOMBIAN_LOCATION_TERMS.some((term) => term.length >= 5 && value.includes(term)))) {
+    return true;
+  }
+
+  const addressValues = normalizedEntries
+    .filter(([key]) => ["direccion", "address", "shippingaddress", "deliveryaddress"].includes(key))
+    .map(([, value]) => value)
+    .filter(Boolean);
+  return addressValues.some((value) =>
+    COLOMBIAN_LOCATION_TERMS.some((term) => term.length >= 6 && value.includes(term))
+  );
 }
 
 /**
