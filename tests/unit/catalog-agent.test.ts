@@ -232,6 +232,29 @@ describe("catálogo Meta del agente (031)", () => {
     expect(resolveInStockProducts({ ...catalog, products: [{ ...product, availability: "out of stock" }] }, ["SKU-01"])).toBeNull();
   });
 
+  it("usa el precio de oferta vigente y conserva el precio anterior", () => {
+    const saleProduct = {
+      ...product,
+      attributes: {
+        material: "cuero",
+        sale_price: "99000",
+        sale_price_start_date: "2026-10-01T00:00:00-0500",
+        sale_price_end_date: "2026-10-31T23:59:59-0500",
+      },
+    };
+    const message = catalogProductsText([saleProduct], "tiktok");
+    expect(message).toContain("Precio: 99000 COP (en oferta)");
+    expect(message).toContain("Antes: 120000 COP");
+    expect(message).not.toContain("Precio: 120000 COP");
+
+    const beforeSale = catalogProductsText([{
+      ...saleProduct,
+      attributes: { ...saleProduct.attributes, sale_price_start_date: "2026-11-01T00:00:00-0500" },
+    }], "tiktok");
+    expect(beforeSale).toContain("Precio: 120000 COP");
+    expect(beforeSale).not.toContain("Antes:");
+  });
+
   it("construye ficha comercial, sin metadatos técnicos ni enlaces", () => {
     const message = catalogProductsText(
       [{
