@@ -144,7 +144,7 @@ export function OrdersClient() {
             ? `Actualización lista: ${refreshed} pedido(s) consultado(s) en Dropi y ${reconciled} solicitud(es) de Vocero vinculada(s).${failed ? ` ${failed} pedido(s) no se pudieron actualizar.` : ""}`
             : failed
               ? `No se pudieron actualizar ${failed} pedido(s) en Dropi. Revisa la conexión e inténtalo de nuevo.`
-              : "Actualización lista. No había pedidos vinculados que requirieran sincronización."
+              : "Actualización lista. Dropi no devolvió pedidos para esta cuenta."
         );
       }
       const response = await fetch("/api/orders", { cache: "no-store" });
