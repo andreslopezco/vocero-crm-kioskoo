@@ -65,6 +65,7 @@ describe("catálogo Meta del agente (031)", () => {
       expect(parsed.data.dropiProductId).toBe("12345");
     }
     expect(catalogProductMutationSchema.safeParse({ ...input, dropiProductId: "SKU-OLLAS-01" }).success).toBe(false);
+    expect(catalogProductMutationSchema.safeParse({ ...input, dropiProductId: "0" }).success).toBe(false);
     expect(catalogProductMutationSchema.safeParse({ ...input, imageUrls: ["https://cdn.example.com/olla.jpg"] }).data).not.toHaveProperty("imageUrls");
     expect(catalogProductMutationSchema.safeParse({ ...input, url: "https://user:password@tienda.example.com" }).success).toBe(false);
     expect(catalogProductMutationSchema.safeParse({ ...input, price: "0" }).success).toBe(false);
