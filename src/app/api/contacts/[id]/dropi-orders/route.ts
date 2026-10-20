@@ -2,7 +2,7 @@ import { z } from "zod";
 import { apiError, parseBody, withAuth } from "@/lib/api";
 import { canConfigure } from "@/lib/auth/roles";
 import { dropiOrdersEnabled, dropiDisabledResponse } from "@/server/dropi/flag";
-import { DropiLinkError, linkDropiOrderToContact, listDropiOrdersForContact, unlinkDropiOrderFromContact } from "@/server/dropi/linked-orders";
+import { DropiLinkError, linkDropiOrderToContact, listDropiOrdersForContact } from "@/server/dropi/linked-orders";
 import { getContactById } from "@/server/contacts";
 
 export const dynamic = "force-dynamic";
@@ -41,12 +41,6 @@ export const POST = withAuth(async (session, req: Request, ctx: Params) => {
   }
 });
 
-export const DELETE = withAuth(async (session, req: Request, ctx: Params) => {
-  if (!dropiOrdersEnabled()) return dropiDisabledResponse();
-  if (!canConfigure(session.role)) return apiError(403, "forbidden", "No tienes permiso para desvincular pedidos.");
-  const parsed = await parseBody(req, orderSchema);
-  if (!parsed.ok) return parsed.response;
-  const { id } = await ctx.params;
-  await unlinkDropiOrderFromContact(session.organizationId, id, parsed.data.orderId);
-  return Response.json({ unlinked: true });
-});
+export const DELETE = withAuth(async () =>
+  apiError(405, "order_unlink_disabled", "Los pedidos vinculados se mantienen asociados a su contacto.")
+);

@@ -93,6 +93,12 @@ const config: Config = {
           soft: "var(--warning-soft)",
           text: "var(--warning-text)",
         },
+        attention: {
+          DEFAULT: "var(--attention)",
+          tint: "var(--attention-tint)",
+          soft: "var(--attention-soft)",
+          text: "var(--attention-text)",
+        },
         danger: {
           DEFAULT: "var(--danger)",
           tint: "var(--danger-tint)",

@@ -6,7 +6,7 @@ import { CatalogError, saveCatalogProduct, type CatalogProductMutation } from "@
 export const dynamic = "force-dynamic";
 
 function errorStatus(err: CatalogError): number {
-  if (err.code === "not_connected" || err.code === "no_catalog" || err.code === "product_exists") return 409;
+  if (err.code === "not_connected" || err.code === "no_catalog") return 409;
   if (err.code === "product_not_found") return 404;
   if (err.code === "meta_unavailable") return 503;
   return 422;
@@ -14,8 +14,7 @@ function errorStatus(err: CatalogError): number {
 
 async function mutateProduct(
   session: { organizationId: string },
-  req: Request,
-  mode: "create" | "update"
+  req: Request
 ): Promise<Response> {
   if (!catalogEnabled()) return catalogDisabledResponse();
   const parsed = await parseBody(req, catalogProductMutationSchema);
@@ -23,8 +22,7 @@ async function mutateProduct(
   try {
     const result = await saveCatalogProduct(
       session.organizationId,
-      parsed.data as CatalogProductMutation,
-      mode
+      parsed.data as CatalogProductMutation
     );
     return Response.json({ ok: true, synced: result.synced });
   } catch (err) {
@@ -35,5 +33,4 @@ async function mutateProduct(
   }
 }
 
-export const POST = withAuth((session, req: Request) => mutateProduct(session, req, "create"));
-export const PUT = withAuth((session, req: Request) => mutateProduct(session, req, "update"));
+export const PUT = withAuth((session, req: Request) => mutateProduct(session, req));

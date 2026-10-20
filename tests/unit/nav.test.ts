@@ -26,6 +26,14 @@ describe("barra lateral agrupada", () => {
     ]);
   });
 
+  it("DROPi añade Pedidos al grupo Trabajo solo cuando está habilitado", () => {
+    expect(appNavGroups({ role: "owner" })[0]!.items.map((i) => i.href)).not.toContain("/orders");
+    expect(appNavGroups({ dropi: true, role: "owner" })[0]!.items.at(-1)).toMatchObject({
+      href: "/orders",
+      label: "Pedidos",
+    });
+  });
+
   it("AGENDA añade Citas al final de Trabajo", () => {
     const [trabajo] = appNavGroups({ agenda: true, role: "member" });
     expect(trabajo!.items.map((i) => i.label)).toEqual([

@@ -29,6 +29,7 @@ export function AppShell({
   commit,
   agenda = false,
   catalogo = false,
+  dropi = false,
   kicker,
   aviso = null,
   children,
@@ -43,6 +44,8 @@ export function AppShell({
   agenda?: boolean;
   /** 031 — ¿esta instancia tiene consulta del catálogo Meta? */
   catalogo?: boolean;
+  /** 033 — Pedidos Dropi aparece si la integración está habilitada. */
+  dropi?: boolean;
   /** 028 — La etiqueta bajo el logo (`navKicker`). */
   kicker?: string;
   /**
@@ -93,6 +96,7 @@ export function AppShell({
         theme={theme}
         agenda={agenda}
         catalogo={catalogo}
+        dropi={dropi}
         kicker={kicker}
         open={navOpen}
         onClose={() => setNavOpen(false)}

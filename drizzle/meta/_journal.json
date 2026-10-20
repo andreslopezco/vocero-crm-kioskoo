@@ -176,6 +176,13 @@
       "when": 1792460994790,
       "tag": "0024_dropi_order_links",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792461000000,
+      "tag": "0025_dropi_order_sync",
+      "breakpoints": true
     }
   ]
 }

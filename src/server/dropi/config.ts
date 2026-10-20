@@ -16,8 +16,10 @@ export function dropiConfig() {
   return {
     mcpUrl,
     callbackUrl: new URL("/api/dropi/callback", appUrl),
-    skipIssuerMetadataValidation:
-      (env.DROPI_OAUTH_ALLOW_ISSUER_MISMATCH ?? "").trim().toLowerCase() === "true",
+    // Dropi publica un issuer que no coincide con el recurso protegido MCP.
+    // La compatibilidad se permite porque el recurso y el redirect OAuth se
+    // validan contra los hosts oficiales exactos en oauth-provider.ts.
+    skipIssuerMetadataValidation: true,
   };
 }
 

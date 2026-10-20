@@ -37,6 +37,7 @@ const prefixes = {
   dropiOAuthFlow: "doauth",
   dropiOrderSubmission: "dorder",
   dropiOrderLink: "dlink",
+  dropiOrderSync: "dsync",
   // 021 — despacho al cerebro
   dispatch: "dsp",
   // 026 — el aviso de que una conversación se eliminó

@@ -50,7 +50,7 @@ export type CatalogSnapshot = {
 };
 
 export class CatalogError extends Error {
-  constructor(message: string, readonly code: "not_connected" | "no_catalog" | "meta_unavailable" | "meta_error" | "product_exists" | "product_not_found") {
+  constructor(message: string, readonly code: "not_connected" | "no_catalog" | "meta_unavailable" | "meta_error" | "product_not_found") {
     super(message);
     this.name = "CatalogError";
   }
@@ -75,13 +75,12 @@ export type CatalogProductMutation = {
   pattern: string;
 };
 
-export function catalogProductGraphPayload(product: CatalogProductMutation, mode: "create" | "update") {
+export function catalogProductGraphPayload(product: CatalogProductMutation) {
   const [whole, fraction = ""] = product.price.split(".");
   // Product editor/catalog snapshots use major currency units (e.g. 309900 COP),
   // while the direct Meta mutation stores the amount in hundredths (30990000).
   const priceInMinorUnits = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
   return {
-    ...(mode === "create" ? { allow_upsert: false } : {}),
     retailer_id: product.retailerId,
     name: product.name,
     description: product.description,
@@ -103,14 +102,12 @@ export function catalogProductGraphPayload(product: CatalogProductMutation, mode
 }
 
 /**
- * Crea o actualiza un producto en el único catálogo asociado a la WABA.
- * La clave retailer_id se valida contra el snapshot antes de tocar Meta para
- * que un formulario manipulado no convierta una edición en una creación.
+ * Actualiza un producto existente del catálogo asociado a la WABA.
+ * La clave retailer_id se valida contra el snapshot antes de tocar Meta.
  */
 export async function saveCatalogProduct(
   organizationId: string,
-  product: CatalogProductMutation,
-  mode: "create" | "update"
+  product: CatalogProductMutation
 ): Promise<{ synced: boolean }> {
   const [credentials, snapshot] = await Promise.all([
     getCredentialsByOrg(organizationId),
@@ -123,38 +120,32 @@ export async function saveCatalogProduct(
     throw new CatalogError("Sincroniza primero el catálogo vinculado a WhatsApp", "no_catalog");
   }
   const existing = snapshot.products.some((item) => item.retailerId === product.retailerId);
-  if (mode === "create" && existing) {
-    throw new CatalogError("Ya existe un producto con ese identificador", "product_exists");
-  }
-  if (mode === "update" && !existing) {
+  if (!existing) {
     throw new CatalogError("No se encontró el producto en el catálogo sincronizado; vuelve a sincronizar", "product_not_found");
   }
 
   // Las ediciones se hacen contra el ID de nodo de Meta, no mediante
   // allow_upsert/retailer_id en el edge del catálogo. Esto evita que Meta
   // acepte el upsert sin cambiar el item que Commerce Manager está mostrando.
-  let metaProductId: string | null = null;
-  if (mode === "update") {
-    let current = snapshot.products.find((item) => item.retailerId === product.retailerId);
-    const attributes = current?.attributes as Record<string, unknown> | undefined;
-    if (typeof attributes?.meta_product_id !== "string") {
-      const refreshed = await syncCatalog(organizationId);
-      current = refreshed.products.find((item) => item.retailerId === product.retailerId);
-    }
-    const refreshedAttributes = current?.attributes as Record<string, unknown> | undefined;
-    metaProductId = typeof refreshedAttributes?.meta_product_id === "string"
-      ? refreshedAttributes.meta_product_id
-      : null;
-    if (!metaProductId) {
-      throw new CatalogError("No se pudo identificar el producto en Meta; sincroniza el catálogo e inténtalo de nuevo", "product_not_found");
-    }
+  let current = snapshot.products.find((item) => item.retailerId === product.retailerId);
+  const attributes = current?.attributes as Record<string, unknown> | undefined;
+  if (typeof attributes?.meta_product_id !== "string") {
+    const refreshed = await syncCatalog(organizationId);
+    current = refreshed.products.find((item) => item.retailerId === product.retailerId);
+  }
+  const refreshedAttributes = current?.attributes as Record<string, unknown> | undefined;
+  const metaProductId = typeof refreshedAttributes?.meta_product_id === "string"
+    ? refreshedAttributes.meta_product_id
+    : null;
+  if (!metaProductId) {
+    throw new CatalogError("No se pudo identificar el producto en Meta; sincroniza el catálogo e inténtalo de nuevo", "product_not_found");
   }
 
   try {
-    await graphRequest<{ id?: string }>(mode === "update" ? metaProductId! : `${snapshot.catalogId}/products`, {
+    await graphRequest<{ id?: string }>(metaProductId, {
       method: "POST",
       token: credentials.token,
-      body: catalogProductGraphPayload(product, mode),
+      body: catalogProductGraphPayload(product),
     });
   } catch (err) {
     if (err instanceof MetaApiError && err.isAuthError) {
@@ -173,21 +164,13 @@ export async function saveCatalogProduct(
   // antes de consultar a Meta nuevamente y publicar un snapshot posterior.
   const pending = inFlight.get(organizationId);
   if (pending) await pending.catch(() => undefined);
-  if (mode === "update") {
-    await storeLocalDropiProductId(organizationId, snapshot.catalogId, product.retailerId, product.dropiProductId ?? "");
-  }
+  await storeLocalDropiProductId(organizationId, snapshot.catalogId, product.retailerId, product.dropiProductId ?? "");
   try {
-    const refreshed = await syncCatalog(organizationId, { force: true });
-    if (mode === "create") {
-      const created = refreshed.products.find((item) => item.retailerId === product.retailerId);
-      if (!created || !(await storeLocalDropiProductId(organizationId, snapshot.catalogId, product.retailerId, product.dropiProductId ?? ""))) {
-        return { synced: false };
-      }
-    }
+    await syncCatalog(organizationId, { force: true });
     return { synced: true };
   } catch {
     // El cambio ya fue aceptado por Meta; no informamos un falso fallo que
-    // anime a duplicar la operación. En edición, el mapeo local ya quedó guardado.
+    // anime a duplicar la operación. El mapeo local ya quedó guardado.
     return { synced: false };
   }
 }
