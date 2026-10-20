@@ -7,6 +7,7 @@ import { getDropiConnection } from "./credentials";
 import { getCatalogSnapshot } from "@/server/catalog/service";
 import { LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE, dropiOrderContainsOnlyMappedProducts, dropiOrderProductIds, dropiProductIdFromAttributes } from "./product-mapping";
 import { callDropiTool, listDropiTools } from "./mcp-client";
+import { listDropiOrdersForContact } from "./linked-orders";
 
 const EXPECTED_STATUS = "PENDIENTE CONFIRMACION";
 
@@ -14,7 +15,7 @@ export class DropiOrderError extends Error {
   constructor(message: string, readonly code: string) { super(message); }
 }
 
-export async function dropiPromptContext(organizationId: string, query: string) {
+export async function dropiPromptContext(organizationId: string, query: string, contactId?: string) {
   const connection = await getDropiConnection(organizationId);
   if (!connection || connection.status !== "connected") return null;
   let productData: string | null = null;
@@ -45,6 +46,9 @@ export async function dropiPromptContext(organizationId: string, query: string) 
     tools: connection.bundle.tools ?? [],
     productData,
     catalogProducts,
+    linkedOrders: contactId
+      ? await listDropiOrdersForContact(organizationId, contactId).then((result) => result.orders).catch(() => [])
+      : [],
   };
 }
 
