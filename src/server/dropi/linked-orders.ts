@@ -241,9 +241,20 @@ function dateValue(data: unknown, keys: string[]): string | null {
   const text = textValue(value);
   if (!text) return null;
   const numeric = Number(text);
-  const date = new Date(Number.isFinite(numeric) && /^\d{10,13}$/.test(text)
+  const isEpoch = Number.isFinite(numeric) && /^\d{10,13}$/.test(text);
+  // Dropi's naive timestamps represent Colombia local time (UTC-5), not UTC.
+  // Preserve explicit timezone offsets and only add Colombia's offset when absent.
+  const hasTimezone = /(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(text);
+  const isLocalDate = /^\d{4}-\d{2}-\d{2}$/.test(text);
+  const isLocalDateTime = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(text);
+  const normalizedText = !hasTimezone && isLocalDate
+    ? `${text}T00:00:00-05:00`
+    : !hasTimezone && isLocalDateTime
+      ? `${text.replace(" ", "T")}-05:00`
+      : text;
+  const date = new Date(isEpoch
     ? (text.length === 10 ? numeric * 1000 : numeric)
-    : text);
+    : normalizedText);
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
