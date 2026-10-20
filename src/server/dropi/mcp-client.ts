@@ -6,7 +6,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/client";
 import { dropiConfig } from "./config";
-import { createDropiOAuthFlow, getDropiFlowById, saveDropiToolSnapshot, consumeDropiFlowByState } from "./credentials";
+import { createDropiOAuthFlow, getDropiFlowById, saveDropiToolSnapshot, consumeDropiFlowByState, setDropiError } from "./credentials";
 import { DropiOAuthProvider } from "./oauth-provider";
 
 function clientFor(provider: DropiOAuthProvider) {
@@ -100,6 +100,13 @@ async function withDropiClient<T>(organizationId: string, task: (client: Client)
   try {
     await client.connect(transport);
     return await task(client);
+  } catch (error) {
+    const requiresReconnect = UnauthorizedError.isInstance(error) ||
+      (error instanceof Error && error.message.includes("autorización de Dropi venció"));
+    if (requiresReconnect) {
+      await setDropiError(organizationId, "La autorización de Dropi venció. Vuelve a conectar la cuenta desde Ajustes → Dropi.");
+    }
+    throw error;
   } finally {
     await client.close().catch(() => undefined);
     await transport.close().catch(() => undefined);
