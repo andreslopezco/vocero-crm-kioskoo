@@ -71,8 +71,8 @@ export function appNavGroups({
   ];
   // Citas va después de Contactos: es el paso siguiente de un trato, no una
   // sección aparte.
-  if (agenda) trabajo.push({ href: "/bookings", label: "Citas", icon: CalendarDays });
   if (dropi) trabajo.push({ href: "/orders", label: "Pedidos", icon: PackageCheck });
+  if (agenda) trabajo.push({ href: "/bookings", label: "Citas", icon: CalendarDays });
 
   const agente: NavItem[] = [];
   // Un miembro del equipo no puede hacer ninguno de los pasos de la guía.
