@@ -4,9 +4,11 @@ import {
   dropiOrderProductIds,
   dropiProductIdFromAttributes,
   LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE,
+} from "@/server/dropi/product-mapping";
+import {
   dropiPayloadFromConfirmedFicha,
   isAffirmativeOrderSummaryConfirmation,
-} from "@/server/dropi/product-mapping";
+} from "@/server/dropi/orders";
 
 describe("mapeo de productos locales a Dropi", () => {
   it("lee únicamente un ID numérico válido del atributo local reservado", () => {
