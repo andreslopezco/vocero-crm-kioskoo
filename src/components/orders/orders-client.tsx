@@ -22,6 +22,8 @@ type Order = {
   contactPhone: string | null;
   status: string | null;
   trackingCode: string | null;
+  carrier: string | null;
+  createdAt: string | null;
   total: string | null;
   currency: string | null;
   items: { name: string; quantity: string | null }[];
@@ -58,10 +60,40 @@ function statusVariant(value: string | null): "success" | "warning" | "destructi
   return "secondary";
 }
 
-function displayDate(value: string) {
+function displayDate(value: string | null) {
+  if (!value) return "No disponible";
   const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "Fecha no disponible";
+  if (!Number.isFinite(date.getTime())) return "No disponible";
   return new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
+function displayMoney(value: string | null, currency: string | null) {
+  if (!value) return null;
+  const raw = value.trim().replace(/[^\d,.-]/g, "");
+  if (!raw) return null;
+  const lastComma = raw.lastIndexOf(",");
+  const lastDot = raw.lastIndexOf(".");
+  const decimalIndex = Math.max(lastComma, lastDot);
+  let normalized = raw;
+  if (lastComma >= 0 && lastDot >= 0) {
+    const decimalDigits = raw.length - decimalIndex - 1;
+    normalized = decimalDigits > 0 && decimalDigits <= 2
+      ? raw.slice(0, decimalIndex).replace(/[,.]/g, "") + "." + raw.slice(decimalIndex + 1)
+      : raw.replace(/[,.]/g, "");
+  } else if (decimalIndex >= 0) {
+    const decimalDigits = raw.length - decimalIndex - 1;
+    normalized = decimalDigits > 0 && decimalDigits <= 2
+      ? raw.slice(0, decimalIndex).replace(/[,.]/g, "") + "." + raw.slice(decimalIndex + 1)
+      : raw.replace(/[,.]/g, "");
+  }
+  const amount = Number(normalized);
+  if (!Number.isFinite(amount)) return value;
+  const code = (currency ?? "COP").toUpperCase();
+  const formatted = new Intl.NumberFormat("es-CO", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+  return code === "COP" ? `${formatted} COP` : `${formatted} ${code}`;
 }
 
 function searchText(order: Order) {
@@ -72,6 +104,7 @@ function searchText(order: Order) {
     order.contactName,
     order.contactPhone,
     order.trackingCode,
+    order.carrier,
     ...order.items.map((item) => item.name),
   ].filter(Boolean).join(" ").toLocaleLowerCase("es");
 }
@@ -205,19 +238,19 @@ export function OrdersClient() {
               <div className="overflow-x-auto rounded-lg border bg-card">
                 <table aria-label="Pedidos registrados" className="w-full min-w-[940px] table-fixed text-sm">
                   <colgroup>
-                    <col className="w-[21%]" />
-                    <col className="w-[19%]" />
-                    <col className="w-[27%]" />
-                    <col className="w-[14%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[9%]" />
+                    <col className="w-[13%]" />
+                    <col className="w-[17%]" />
+                    <col className="w-[28%]" />
+                    <col className="w-[20%]" />
+                    <col className="w-[11%]" />
+                    <col className="w-[11%]" />
                   </colgroup>
                   <thead className="kicker border-b bg-subtle text-left">
                     <tr>
-                      <th scope="col" className="px-3 py-2.5 font-medium sm:px-4">Pedido</th>
+                      <th scope="col" className="px-3 py-2.5 font-medium sm:px-4">ID de pedido</th>
+                      <th scope="col" className="px-3 py-2.5 font-medium">Fecha</th>
                       <th scope="col" className="px-3 py-2.5 font-medium">Contacto</th>
                       <th scope="col" className="px-3 py-2.5 font-medium">Productos</th>
-                      <th scope="col" className="px-3 py-2.5 font-medium">Actualizado</th>
                       <th scope="col" className="px-3 py-2.5 font-medium">Total</th>
                       <th scope="col" className="px-3 py-2.5 font-medium">Estado</th>
                     </tr>
@@ -227,11 +260,16 @@ export function OrdersClient() {
                       <tr key={order.providerOrderId ?? order.shopOrderId ?? order.orderId} className="border-t align-middle first:border-t-0">
                         <td className="min-w-0 px-3 py-3 sm:px-4">
                           <p className="break-all font-semibold leading-5">
-                            {order.providerOrderId ? `Pedido ${order.providerOrderId}` : "Pedido pendiente de revisión"}
+                            {order.providerOrderId ?? (order.shopOrderId && !/^voc-/i.test(order.shopOrderId) ? order.shopOrderId : "Pendiente")}
                           </p>
+                          {order.carrier && <p className="mt-1 truncate text-[11px] text-text-3" title={order.carrier}>Transportadora: {order.carrier}</p>}
                           {order.trackingCode
-                            ? <p className="mt-1 flex items-center gap-1.5 text-xs text-text-3"><Truck className="h-3.5 w-3.5 shrink-0" />Guía {order.trackingCode}</p>
-                            : <p className="mt-1 truncate text-xs text-text-3" title={order.shopOrderId ?? undefined}>{order.shopOrderId ? `Referencia ${order.shopOrderId}` : "Sin guía"}</p>}
+                            ? <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-3"><Truck className="h-3 w-3 shrink-0" />Guía {order.trackingCode}</p>
+                            : null}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-3">
+                          <p className="text-xs text-text-2">{displayDate(order.createdAt)}</p>
+                          <p className="mt-1 text-[10px] leading-4 text-text-3">Actualizado {displayDate(order.updatedAt)}</p>
                         </td>
                         <td className="min-w-0 px-3 py-3">
                           <p className="truncate font-medium" title={order.contactName}>{order.contactName}</p>
@@ -250,12 +288,11 @@ export function OrdersClient() {
                             </div>
                           ) : <span className="text-text-3">Detalle no disponible</span>}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-3 text-xs text-text-2">{displayDate(order.updatedAt)}</td>
                         <td className="whitespace-nowrap px-3 py-3 font-semibold">
-                          {order.total ? <>{order.total}{order.currency ? ` ${order.currency}` : ""}</> : <span className="font-normal text-text-3">—</span>}
+                          {displayMoney(order.total, order.currency) ?? <span className="font-normal text-text-3">—</span>}
                         </td>
                         <td className="px-3 py-3">
-                          <Badge variant={statusVariant(order.status)}>{statusText(order.status)}</Badge>
+                          <Badge className="whitespace-nowrap px-2 py-0.5 text-[10px]" variant={statusVariant(order.status)}>{statusText(order.status)}</Badge>
                         </td>
                       </tr>
                     ))}
