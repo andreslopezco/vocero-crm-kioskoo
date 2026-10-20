@@ -63,6 +63,37 @@ export function normalizeFicha(raw: FichaInput): Ficha {
   return out;
 }
 
+const PHONE_FIELD_KEYS = new Set([
+  "telefono",
+  "phone",
+  "celular",
+  "mobile",
+  "movil",
+  "numerodetelefono",
+  "numerocelular",
+  "whatsapp",
+  "whatsappphone",
+  "whatsappnumber",
+]);
+
+/**
+ * Obtiene un teléfono capturado en los campos flexibles de la ficha.
+ * Acepta etiquetas comunes en español/inglés, pero solo valores telefónicos
+ * (dígitos, espacios y separadores) de 7 a 15 dígitos.
+ */
+export function phoneFromFicha(raw: unknown): string | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  for (const [rawKey, value] of Object.entries(raw)) {
+    const key = rawKey.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!PHONE_FIELD_KEYS.has(key) || (typeof value !== "string" && typeof value !== "number")) continue;
+    const candidate = String(value).trim();
+    if (!candidate || !/^\\+?[\\d\\s().-]+$/.test(candidate)) continue;
+    const digits = candidate.replace(/\\D/g, "");
+    if (digits.length >= 7 && digits.length <= 15) return digits;
+  }
+  return null;
+}
+
 /** Merge campo a campo: lo ausente se conserva, `null` explícito borra. */
 export function mergeFicha(prev: Ficha | null | undefined, patch: Ficha): Ficha {
   const out: Ficha = { ...(prev ?? {}) };
@@ -103,7 +134,7 @@ export async function upsertFicha(input: {
   );
 
   const rows = await db
-    .select({ ficha: schema.contact.ficha })
+    .select({ ficha: schema.contact.ficha, phone: schema.contact.phone })
     .from(schema.contact)
     .where(alcance)
     .limit(1);
@@ -111,9 +142,16 @@ export async function upsertFicha(input: {
 
   const merged = mergeFicha(rows[0].ficha as Ficha | null, patch);
 
+  const update: Partial<typeof schema.contact.$inferInsert> = {
+    ficha: merged,
+    updatedAt: new Date(),
+  };
+  const capturedPhone = phoneFromFicha(merged);
+  if (!rows[0].phone && capturedPhone) update.phone = capturedPhone;
+
   await db
     .update(schema.contact)
-    .set({ ficha: merged, updatedAt: new Date() })
+    .set(update)
     .where(alcance);
 
   return { ficha: merged };
