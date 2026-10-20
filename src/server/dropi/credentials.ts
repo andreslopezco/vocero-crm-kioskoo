@@ -173,13 +173,20 @@ export async function saveDropiTools(organizationId: string, tools: DropiToolSna
   });
 }
 
-export async function setDropiError(organizationId: string, message: string) {
+export async function setDropiErrorIfCredentialsUnchanged(
+  organizationId: string,
+  oauthCipher: string,
+  message: string
+) {
   const db = getDb();
   await db.update(schema.dropiCredentials).set({
     status: "error",
     lastError: message.slice(0, 500),
     updatedAt: new Date(),
-  }).where(scoped(schema.dropiCredentials.organizationId, organizationId));
+  }).where(and(
+    scoped(schema.dropiCredentials.organizationId, organizationId),
+    eq(schema.dropiCredentials.oauthCipher, oauthCipher)
+  ));
 }
 
 export async function removeDropiConnection(organizationId: string) {
