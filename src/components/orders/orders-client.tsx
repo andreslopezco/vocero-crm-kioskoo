@@ -120,26 +120,18 @@ export function OrdersClient() {
   ).length;
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8">
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-brand-tint text-brand-text">
-              <PackageCheck className="h-5 w-5" aria-hidden />
-            </span>
-            <div>
-              <p className="kicker">Trabajo</p>
-              <h1 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">Pedidos</h1>
-              <p className="mt-1 max-w-2xl text-sm text-text-2">
-                Consulta en un solo lugar los pedidos registrados para tus contactos.
-              </p>
-            </div>
-          </div>
-          <Button variant="outline" onClick={() => void load(true)} disabled={loading || refreshing}>
-            <RefreshCw className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-            Actualizar
-          </Button>
-        </header>
+    <div className="flex h-full flex-col">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-6 sm:py-4">
+        <div className="min-w-0">
+          <h2 className="text-[17px] font-bold tracking-tight">Pedidos</h2>
+          <p className="text-xs text-text-3">Consulta en un solo lugar los pedidos registrados para tus contactos.</p>
+        </div>
+        <Button variant="outline" onClick={() => void load(true)} disabled={loading || refreshing}>
+          <RefreshCw className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+          Actualizar
+        </Button>
+      </header>
+      <div className="mx-auto w-full max-w-6xl flex-1 space-y-6 overflow-y-auto p-4 sm:p-6 lg:p-8">
 
         {!data?.connected && (
           <div className="flex items-start gap-3 rounded-md border border-warning-soft bg-warning-tint p-4 text-sm text-warning-text" role="status">
