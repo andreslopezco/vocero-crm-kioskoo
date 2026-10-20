@@ -199,6 +199,48 @@ export function OrdersClient() {
   }, [assignmentOrderId, contactQuery]);
 
   const sourceOrders = showDeleted ? data?.deletedOrders ?? [] : data?.orders ?? [];
+
+  useEffect(() => {
+    if (!actionOrderId) return;
+
+    const updateMenuPosition = () => {
+      const trigger = Array.from(document.querySelectorAll<HTMLElement>("[data-order-menu-trigger]"))
+        .find((element) => element.dataset.orderMenuTrigger === actionOrderId);
+      if (!trigger) {
+        setActionOrderId(null);
+        setMenuPosition(null);
+        return;
+      }
+
+      const rect = trigger.getBoundingClientRect();
+      if (rect.bottom <= 0 || rect.top >= window.innerHeight || rect.right <= 0 || rect.left >= window.innerWidth) {
+        setActionOrderId(null);
+        setMenuPosition(null);
+        return;
+      }
+
+      const activeOrder = sourceOrders.find((order) =>
+        (order.providerOrderId ?? order.shopOrderId ?? order.orderId) === actionOrderId
+      );
+      const estimatedHeight = showDeleted
+        ? 56
+        : activeOrder?.source === "dropi" && !activeOrder.contactId
+          ? assignmentOrderId === actionOrderId ? 360 : 280
+          : 56;
+      const top = window.innerHeight - rect.bottom > estimatedHeight + 12
+        ? rect.bottom + 4
+        : Math.max(8, rect.top - estimatedHeight - 4);
+
+      setMenuPosition({ top, right: Math.max(8, window.innerWidth - rect.right) });
+    };
+
+    window.addEventListener("scroll", updateMenuPosition, true);
+    window.addEventListener("resize", updateMenuPosition);
+    return () => {
+      window.removeEventListener("scroll", updateMenuPosition, true);
+      window.removeEventListener("resize", updateMenuPosition);
+    };
+  }, [actionOrderId, assignmentOrderId, showDeleted, sourceOrders]);
   const orders = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("es");
     return sourceOrders.filter((order) => {
@@ -425,6 +467,7 @@ export function OrdersClient() {
                               className="h-7 w-7"
                               aria-label={`Acciones para pedido ${order.providerOrderId ?? order.shopOrderId ?? order.orderId}`}
                               aria-haspopup="menu"
+                              data-order-menu-trigger={order.providerOrderId ?? order.shopOrderId ?? order.orderId}
                               aria-expanded={actionOrderId === (order.providerOrderId ?? order.shopOrderId ?? order.orderId)}
                               onClick={(event) => {
                                 const id = order.providerOrderId ?? order.shopOrderId ?? order.orderId;
