@@ -106,7 +106,9 @@ export function dropiPayloadFromConfirmedFicha(input: {
   if (!schemaDef || schemaDef.type !== "object") return null;
   const properties = schemaDef.properties ?? {};
   const propertyKey = (candidates: string[], source: Record<string, unknown> = properties) =>
-    Object.keys(source).find((key) => candidates.includes(normalizedFichaKey(key)));
+    Object.keys(source).find((key) =>
+      candidates.some((candidate) => normalizedFichaKey(candidate) === normalizedFichaKey(key))
+    );
   const readProperty = (key: string) => properties[key] as {
     items?: { properties?: Record<string, unknown>; required?: string[] };
   } | undefined;
