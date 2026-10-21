@@ -10,6 +10,7 @@ type BeforeInstallPromptEvent = Event & {
 };
 
 type ConfigPush = { enabled: boolean; publicKey: string };
+const LOCAL_ALERTS_KEY = "vocero.localNotifications.v1";
 
 function esIos(): boolean {
   return /iphone|ipad|ipod/i.test(navigator.userAgent) ||
@@ -97,11 +98,13 @@ export function PwaControls({
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [config, setConfig] = useState<ConfigPush | null>(null);
   const [subscribed, setSubscribed] = useState(false);
+  const [localAlertsEnabled, setLocalAlertsEnabled] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
   const audioContext = useRef<AudioContext | null>(null);
   const serviceWorkerRef = useRef<ServiceWorkerRegistration | null>(null);
   const soundEnabledRef = useRef(false);
+  const localAlertsRef = useRef(false);
   const pushBusyRef = useRef(false);
   const onActivityRef = useRef(onActivity);
   onActivityRef.current = onActivity;
@@ -110,6 +113,9 @@ export function PwaControls({
     const soundPreference = localStorage.getItem("vocero.soundEnabled.v1") === "true";
     soundEnabledRef.current = soundPreference;
     setSoundEnabled(soundPreference);
+    const localAlertsPreference = localStorage.getItem(LOCAL_ALERTS_KEY) === "true";
+    localAlertsRef.current = localAlertsPreference;
+    setLocalAlertsEnabled(localAlertsPreference);
 
     if ("serviceWorker" in navigator) {
       void navigator.serviceWorker.register("/sw.js", { scope: "/" })
@@ -144,6 +150,11 @@ export function PwaControls({
           return navigator.serviceWorker.ready.then((registration) =>
             registration.pushManager.getSubscription().then((subscription) => {
               setSubscribed(Boolean(subscription));
+              if (subscription) {
+                localStorage.removeItem(LOCAL_ALERTS_KEY);
+                localAlertsRef.current = false;
+                setLocalAlertsEnabled(false);
+              }
             })
           );
         }
@@ -210,8 +221,26 @@ export function PwaControls({
   const onMessage = useCallback((data: { message: unknown }) => {
     onActivityRef.current?.();
     const message = data.message as { direction?: unknown } | null;
-    if (message?.direction === "in" && soundEnabledRef.current) {
-      void emitirSonido();
+    if (message?.direction === "in") {
+      if (soundEnabledRef.current) void emitirSonido();
+      // Fallback de escritorio cuando el servicio push del navegador no
+      // permite crear una suscripción. Funciona solo mientras la web esté abierta.
+      if (localAlertsRef.current && "Notification" in window && Notification.permission === "granted") {
+        const title = "Nuevo mensaje";
+        const options = {
+          body: "Tienes un mensaje nuevo en tu bandeja.",
+          icon: "/apple-touch-icon.png",
+          tag: "vocero-local-message",
+          data: { path: "/inbox" },
+        };
+        if (serviceWorkerRef.current) {
+          void serviceWorkerRef.current.showNotification(title, options).catch(() => {
+            try { new Notification(title, options); } catch { /* El SO puede bloquear los avisos. */ }
+          });
+        } else {
+          try { new Notification(title, options); } catch { /* El SO puede bloquear los avisos. */ }
+        }
+      }
     }
   }, [emitirSonido]);
 
@@ -222,8 +251,15 @@ export function PwaControls({
       : undefined,
   }, handleEvents);
 
-  async function alternarPush() {
+  async function alternarPush(forceRetry = false) {
     if (pushBusyRef.current) return;
+    if (localAlertsEnabled && !forceRetry) {
+      localStorage.removeItem(LOCAL_ALERTS_KEY);
+      localAlertsRef.current = false;
+      setLocalAlertsEnabled(false);
+      setFeedback("Avisos de esta pestaña desactivados.");
+      return;
+    }
     if (!window.isSecureContext) {
       setFeedback("Las notificaciones requieren una conexión segura (HTTPS).");
       return;
@@ -305,14 +341,21 @@ export function PwaControls({
         throw new Error(await errorServidor(response, "No se pudo registrar este dispositivo"));
       }
       setSubscribed(true);
+      localStorage.removeItem(LOCAL_ALERTS_KEY);
+      localAlertsRef.current = false;
+      setLocalAlertsEnabled(false);
       setFeedback("Notificaciones activadas para este dispositivo.");
     } catch (error) {
-      setFeedback(
-        errorPush(error) ??
-          (error instanceof Error
-            ? error.message
-            : "No se pudieron configurar las notificaciones. Inténtalo otra vez.")
-      );
+      if (errorPush(error) && !esIos() && Notification.permission === "granted") {
+        localStorage.setItem(LOCAL_ALERTS_KEY, "true");
+        localAlertsRef.current = true;
+        setLocalAlertsEnabled(true);
+        setFeedback("Este navegador no pudo activar push en segundo plano. Recibirás avisos mientras esta pestaña esté abierta; con el navegador cerrado no llegarán.");
+      } else {
+        setFeedback(errorPush(error) ?? (error instanceof Error
+          ? error.message
+          : "No se pudieron configurar las notificaciones. Inténtalo otra vez."));
+      }
     } finally {
       pushBusyRef.current = false;
       setPushBusy(false);
@@ -353,12 +396,18 @@ export function PwaControls({
             type="button"
             onClick={() => void alternarPush()}
             disabled={pushBusy}
-            aria-label={subscribed ? "Desactivar notificaciones" : "Activar notificaciones"}
-            title={subscribed ? "Desactivar notificaciones" : "Activar notificaciones"}
+            aria-label={subscribed ? "Desactivar notificaciones" : localAlertsEnabled ? "Desactivar avisos de esta pestaña" : "Activar notificaciones"}
+            title={subscribed ? "Desactivar notificaciones" : localAlertsEnabled ? "Desactivar avisos de esta pestaña" : "Activar notificaciones"}
             className="flex min-w-0 items-center justify-center gap-2 rounded-sm border px-3 py-2.5 text-xs font-semibold text-text-2 hover:bg-accent hover:text-foreground"
           >
-            {subscribed ? <BellOff className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <Bell className="h-3.5 w-3.5 shrink-0" aria-hidden />}
-            <span className="truncate">{subscribed ? "Avisos sí" : "Avisos no"}</span>
+            {subscribed || localAlertsEnabled ? <BellOff className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <Bell className="h-3.5 w-3.5 shrink-0" aria-hidden />}
+            <span className="truncate">{subscribed ? "Avisos sí" : localAlertsEnabled ? "Avisos en pestaña" : "Avisos no"}</span>
+          </button>
+        )}
+        {config && localAlertsEnabled && !subscribed && (
+          <button type="button" onClick={() => void alternarPush(true)} disabled={pushBusy}
+            className="rounded-sm border px-3 py-2.5 text-xs font-semibold text-text-2 hover:bg-accent hover:text-foreground">
+            Reintentar push
           </button>
         )}
         <button
