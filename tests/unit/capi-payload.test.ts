@@ -16,8 +16,12 @@ vi.mock("@/lib/meta/client", async (importOriginal) => {
   return { ...original, graphRequest };
 });
 
-const { buildEventPayload, sendBusinessMessagingEvent, isMetaBusinessMessagingEvent } =
-  await import("@/lib/meta/capi");
+const {
+  buildEventPayload,
+  ensureWhatsAppDataset,
+  isMetaBusinessMessagingEvent,
+  sendBusinessMessagingEvent,
+} = await import("@/lib/meta/capi");
 
 const EVENT = {
   eventName: "QualifiedLead",
@@ -117,6 +121,26 @@ describe("catálogo cerrado", () => {
   });
 });
 
+describe("dataset de WhatsApp", () => {
+  it("lo resuelve por el WABA con el POST idempotente de Meta", async () => {
+    graphRequest.mockResolvedValue({ id: "1144109868300845" });
+    await expect(
+      ensureWhatsAppDataset({ wabaId: "WABA-1", token: "tok" })
+    ).resolves.toBe("1144109868300845");
+    expect(graphRequest).toHaveBeenCalledWith("WABA-1/dataset", {
+      method: "POST",
+      token: "tok",
+    });
+  });
+
+  it("rechaza una respuesta que no trae dataset", async () => {
+    graphRequest.mockResolvedValue({});
+    await expect(
+      ensureWhatsAppDataset({ wabaId: "WABA-1", token: "tok" })
+    ).rejects.toThrow(/no devolvió el ID/);
+  });
+});
+
 describe("el acuse de Meta", () => {
   it("con events_received >= 1 el evento cuenta como enviado", async () => {
     graphRequest.mockResolvedValue({
@@ -150,6 +174,21 @@ describe("el acuse de Meta", () => {
         event: EVENT,
       })
     ).rejects.toThrow(/events_received=0/);
+  });
+
+  it("Purchase exige value positivo y currency ISO 4217", async () => {
+    await expect(
+      sendBusinessMessagingEvent({
+        datasetId: "ds_1",
+        token: "tok",
+        event: {
+          ...EVENT,
+          eventName: "Purchase",
+          customData: { value: 450.5 },
+        },
+      })
+    ).rejects.toThrow(/Purchase exige/);
+    expect(graphRequest).not.toHaveBeenCalled();
   });
 
   it("una respuesta sin el campo tampoco se toma por buena", async () => {
