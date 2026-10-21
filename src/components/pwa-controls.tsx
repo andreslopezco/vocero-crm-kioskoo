@@ -23,13 +23,32 @@ function estaInstalada(): boolean {
 }
 
 function applicationServerKey(clave: string): ArrayBuffer {
-  const padded = `${clave}${"=".repeat((4 - (clave.length % 4)) % 4)}`;
+  const normalized = clave.trim();
+  const padded = `${normalized}${"=".repeat((4 - (normalized.length % 4)) % 4)}`;
   const raw = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
   const bytes = Uint8Array.from(raw, (char) => char.charCodeAt(0));
+  if (bytes.byteLength !== 65 || bytes[0] !== 4) {
+    throw new Error("La clave de notificaciones del servidor no tiene un formato válido.");
+  }
   return bytes.buffer.slice(
     bytes.byteOffset,
     bytes.byteOffset + bytes.byteLength
   ) as ArrayBuffer;
+}
+
+function obtenerContextoAudio(ref: { current: AudioContext | null }): AudioContext {
+  if (!ref.current || ref.current.state === "closed") {
+    ref.current = new AudioContext();
+  }
+  return ref.current;
+}
+
+function errorPush(error: unknown): string | null {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("push service") || message.includes("registration failed")) {
+    return "El navegador no pudo conectarse a su servicio de notificaciones. Se reintentó y no respondió; revisa la conexión o las políticas del navegador y vuelve a probar.";
+  }
+  return null;
 }
 
 async function errorServidor(response: Response, fallback: string): Promise<string> {
@@ -130,8 +149,7 @@ export function PwaControls({
       if (!enabled) return;
       if (typeof AudioContext === "undefined") return;
       try {
-        const context = audioContext.current ?? new AudioContext();
-        audioContext.current = context;
+        const context = obtenerContextoAudio(audioContext);
         void context.resume();
       } catch {
         // El navegador puede no permitir audio hasta la siguiente interacción.
@@ -144,14 +162,25 @@ export function PwaControls({
 
   }, [handleEvents, showControls]);
 
+  const emitirSonido = useCallback(async () => {
+    if (typeof AudioContext === "undefined") return;
+    try {
+      const context = obtenerContextoAudio(audioContext);
+      if (context.state !== "running") await context.resume();
+      if (context.state === "running") sonar(context);
+    } catch {
+      // El navegador puede suspender audio al dormir o dejar la pestaña inactiva.
+      // Se vuelve a intentar con el próximo mensaje sin apagar la preferencia.
+    }
+  }, []);
+
   const onMessage = useCallback((data: { message: unknown }) => {
     onActivityRef.current?.();
     const message = data.message as { direction?: unknown } | null;
     if (message?.direction === "in" && soundEnabledRef.current) {
-      const context = audioContext.current;
-      if (context?.state === "running") sonar(context);
+      void emitirSonido();
     }
-  }, []);
+  }, [emitirSonido]);
 
   useEvents({
     onMessageNew: handleEvents ? onMessage : undefined,
@@ -192,8 +221,8 @@ export function PwaControls({
         return;
       }
 
-      const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-      await navigator.serviceWorker.ready;
+      await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      const registration = await navigator.serviceWorker.ready;
       const current = await registration.pushManager.getSubscription();
       if (current) {
         const response = await fetch("/api/push/subscription", {
@@ -208,10 +237,20 @@ export function PwaControls({
         return;
       }
 
-      const subscription = await registration.pushManager.subscribe({
+      const subscribe = () => registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: applicationServerKey(config.publicKey),
       });
+      let subscription: PushSubscription;
+      try {
+        subscription = await subscribe();
+      } catch (error) {
+        // El servicio push del navegador a veces falla temporalmente al crear
+        // el endpoint. Reintentar una vez evita dejar al usuario sin feedback.
+        if (!errorPush(error)) throw error;
+        await new Promise((resolve) => window.setTimeout(resolve, 1200));
+        subscription = await subscribe();
+      }
       const response = await fetch("/api/push/subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -224,7 +263,12 @@ export function PwaControls({
       setSubscribed(true);
       setFeedback("Notificaciones activadas para este dispositivo.");
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "No se pudieron configurar las notificaciones. Inténtalo otra vez.");
+      setFeedback(
+        errorPush(error) ??
+          (error instanceof Error
+            ? error.message
+            : "No se pudieron configurar las notificaciones. Inténtalo otra vez.")
+      );
     }
   }
 
@@ -232,8 +276,7 @@ export function PwaControls({
     const next = !soundEnabled;
     if (next && handleEvents && typeof AudioContext !== "undefined") {
       try {
-        const context = audioContext.current ?? new AudioContext();
-        audioContext.current = context;
+        const context = obtenerContextoAudio(audioContext);
         await context.resume();
       } catch {
         setFeedback("El navegador no permitió activar el sonido.");
