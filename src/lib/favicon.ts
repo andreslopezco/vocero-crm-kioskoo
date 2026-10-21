@@ -27,6 +27,8 @@ import { resolveAccentSet, type Branding } from "./branding";
  * handlers como exports de un `route.ts` — cualquier otra cosa rompe el build.
  */
 export const FAVICON_ASSET = "favicon";
+export const TAB_ICON_ASSET = "tab-icon";
+export const APP_ICON_ASSET = "app-icon";
 
 /** Lo que el navegador acepta como icono y nosotros sabemos verificar. */
 export const FAVICON_MIMES = [
@@ -144,8 +146,9 @@ function voceroFaviconSvg(from: string, to: string): string {
  * son justo lo que lo cambia.
  */
 export function faviconCacheKey(
-  branding: Pick<Branding, "name" | "accent" | "favicon">
+  branding: Pick<Branding, "name" | "accent" | "favicon" | "tabIcon">
 ): string {
+  if (branding.tabIcon) return `t${branding.tabIcon.version}`;
   if (branding.favicon) return `u${branding.favicon.version}`;
   let h = 0;
   const semilla = `${branding.name}|${branding.accent}`;
@@ -157,7 +160,40 @@ export function faviconCacheKey(
 
 /** URL que va en el `<link rel="icon">`. */
 export function faviconHref(
-  branding: Pick<Branding, "name" | "accent" | "favicon">
+  branding: Pick<Branding, "name" | "accent" | "favicon" | "tabIcon">
 ): string {
   return `/api/branding/favicon?v=${faviconCacheKey(branding)}`;
+}
+
+/** URL del logo legado para la marca del CRM, aunque haya un favicon aparte. */
+export function logoIconHref(
+  branding: Pick<Branding, "name" | "accent" | "favicon">
+): string {
+  const version = branding.favicon?.version ?? faviconCacheKey({ ...branding, tabIcon: null });
+  return `/api/branding/favicon?logo=1&v=${version}`;
+}
+
+/** URL versionada del icono propio de la app (Android y Apple). */
+export function appIconHref(
+  branding: Pick<Branding, "name" | "accent" | "appIcon">
+): string {
+  return branding.appIcon
+    ? `/api/branding/app-icon?v=${branding.appIcon.version}`
+    : "/api/branding/app-icon";
+}
+
+/**
+ * Ruta con el nombre estándar que Safari busca para los accesos de inicio.
+ * Aunque el `<link rel="apple-touch-icon">` apunte a una URL API válida,
+ * iOS puede ignorar esa URL al crear un web clip y caer en su icono genérico.
+ */
+export function appleTouchIconHref(
+  branding: Pick<Branding, "name" | "accent" | "appIcon">
+): string {
+  // Conservamos el nombre canónico que Apple busca, pero cambiamos la URL
+  // cuando cambia el icono para invalidar el caché de Web Clips de iOS.
+  const version = branding.appIcon?.version;
+  return version
+    ? `/apple-touch-icon.png?v=${version}-ios180`
+    : "/apple-touch-icon.png";
 }

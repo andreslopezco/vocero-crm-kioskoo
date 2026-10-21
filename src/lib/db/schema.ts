@@ -1454,3 +1454,34 @@ export const dispatch = pgTable(
     index("dispatch_status_notbefore_idx").on(t.status, t.notBefore),
   ]
 );
+
+/* ============================================================
+ * 034 — Suscripciones Web Push
+ * ============================================================ */
+
+/**
+ * Una suscripción por navegador/dispositivo y usuario. El endpoint y las
+ * claves del navegador se guardan juntos cifrados; el hash solo sirve para
+ * unicidad/revocación y no permite reconstruir el endpoint.
+ */
+export const pushSubscription = pgTable(
+  "push_subscription",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    endpointHash: text("endpoint_hash").notNull().unique(),
+    payloadCipher: text("payload_cipher").notNull(),
+    payloadIv: text("payload_iv").notNull(),
+    payloadTag: text("payload_tag").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("push_subscription_org_user_idx").on(t.organizationId, t.userId),
+  ]
+);

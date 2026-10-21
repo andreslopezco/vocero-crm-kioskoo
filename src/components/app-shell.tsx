@@ -8,6 +8,7 @@ import type { ThemePreference } from "@/lib/theme";
 import type { ResolvedCommit } from "@/lib/version";
 import { AppNav } from "@/components/app-nav";
 import { BrandLogo } from "@/components/brand-mark";
+import { PwaControls, PwaInstallPrompt } from "@/components/pwa-controls";
 
 /**
  * Cascarón de la app en dos modos:
@@ -79,6 +80,10 @@ export function AppShell({
 
   return (
     <div className="flex h-dvh overflow-hidden bg-background">
+      {/* El oyente global de eventos vive en el cascarón, no dentro del menú
+          lateral: así sigue activo aunque el cajón móvil esté cerrado. */}
+      <PwaControls appName={branding.name} showControls={false} />
+
       {navOpen && (
         <button
           aria-label="Cerrar el menú"
@@ -105,7 +110,7 @@ export function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Misma pieza que la barra lateral (`nav-dark`): en el teléfono la
             franja azul marino de arriba es lo que queda del bicolor. */}
-        <header className="nav-dark flex h-12 shrink-0 items-center gap-1.5 border-b bg-subtle px-2 text-foreground lg:hidden">
+        <header className="mobile-safe-header nav-dark flex shrink-0 items-center gap-1.5 border-b bg-subtle px-2 text-foreground lg:hidden">
           <button
             onClick={() => setNavOpen(true)}
             aria-label="Abrir el menú"
@@ -116,6 +121,8 @@ export function AppShell({
           </button>
           <BrandLogo branding={branding} className="min-w-0" />
         </header>
+
+        <PwaInstallPrompt appName={branding.name} />
 
         {aviso}
 

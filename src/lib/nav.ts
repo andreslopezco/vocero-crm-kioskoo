@@ -152,6 +152,7 @@ export function settingsSections({
   if (atribucion) negocio.push({ href: "/settings/ads", label: "Anuncios" });
 
   return [
+    { title: "Preferencias", links: [{ href: "/settings/general", label: "General" }] },
     { title: "Canales", links: canales },
     { title: "Agente", links: agente },
     { title: "Negocio", links: negocio },

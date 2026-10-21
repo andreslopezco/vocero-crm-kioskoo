@@ -89,14 +89,16 @@ export function AppNav({
     setUnread(data.conversations.reduce((a, c) => a + c.unreadCount, 0));
   }
 
-  useEffect(() => {
-    void refetchUnread();
-  }, []);
-
+  // El contador del menú solo necesita refrescarse con actividad; el oyente
+  // de sonido/notificaciones vive de forma global en AppShell.
   useEvents({
     onMessageNew: () => void refetchUnread(),
     onConversationUpdated: () => void refetchUnread(),
   });
+
+  useEffect(() => {
+    void refetchUnread();
+  }, []);
 
   const version = commit ?? { commit: BUILD_COMMIT, verified: BUILD_COMMIT !== "" };
   // #87 — Qué hay en el menú y en qué grupo lo decide `appNavGroups`; aquí
@@ -139,7 +141,7 @@ export function AppNav({
         // nombre del usuario, el nombre white-label en BrandLogo) hereda el
         // color YA CALCULADO en <body> con el tema de la página, no el de
         // `.nav-dark` — y un texto oscuro sobre este fondo oscuro se pierde.
-        "nav-dark fixed inset-y-0 left-0 z-50 flex w-[17rem] shrink-0 flex-col overflow-y-auto border-r bg-subtle px-3 pb-3.5 pt-4 text-foreground transition-[transform,visibility] duration-200",
+        "nav-dark mobile-safe-sidebar fixed inset-y-0 left-0 z-50 flex w-[17rem] shrink-0 flex-col overflow-y-auto border-r bg-subtle px-3 pb-3.5 text-foreground transition-[transform,visibility] duration-200",
         "lg:static lg:visible lg:z-auto lg:w-56 lg:translate-x-0 lg:overflow-visible lg:transition-none",
         open ? "visible translate-x-0 shadow-pop" : "invisible -translate-x-full"
       )}

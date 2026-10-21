@@ -5,6 +5,24 @@ sigue el SemVer del [README](README.md#versiones): una menor trae funciones
 nuevas y actualizar es redesplegar. Desde 1.4.0, cada tag `vX.Y.Z` publica la
 imagen `ghcr.io/kevinrivm/vocero-crm:X.Y.Z`.
 
+## 1.7.0 — 2026-10-20
+
+Vocero se puede instalar como una app web en el celular. La bandeja puede
+avisar de mensajes nuevos incluso cuando la app está cerrada, y permite activar
+un sonido discreto mientras está abierta. El push es opcional, no expone datos
+del cliente en la pantalla bloqueada y sus suscripciones quedan cifradas en
+Postgres.
+
+### Actualizar desde 1.6.0
+
+1. Respalda la base, como siempre.
+2. Redespliega con la imagen `1.7.0`; la migración `0026` se aplica sola.
+3. Para instalar, abre Vocero en el navegador del celular y usa «Instalar»; en
+   iPhone, comparte la página y elige «Agregar a pantalla de inicio».
+4. El sonido de mensajes puede activarse en la barra lateral. Para notificaciones
+   del sistema, configura claves VAPID y `PUSH_NOTIFICATIONS=on`, redespliega y
+   activa los avisos desde cada dispositivo.
+
 ## 1.6.0 — 2026-10-14
 
 La versión multicanal. Instagram, Messenger y ahora TikTok llegan a la misma

@@ -7,7 +7,7 @@ import {
   BRAND_MARK_TAIL,
   isVoceroName,
 } from "@/lib/brand";
-import { faviconHref, faviconInitial } from "@/lib/favicon";
+import { logoIconHref, faviconInitial } from "@/lib/favicon";
 import { cn } from "@/lib/utils";
 
 /**
@@ -74,7 +74,7 @@ export function BrandTile({
         // pequeño; pasarlo por el optimizador sería trabajo para no ahorrar.
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={faviconHref(branding)}
+          src={logoIconHref(branding)}
           alt=""
           className="h-full w-full object-contain"
         />

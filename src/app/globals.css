@@ -228,6 +228,25 @@
     --shadow-pop: 0 30px 80px -20px rgba(0, 0, 0, 0.75),
       0 8px 24px -12px rgba(0, 0, 0, 0.5);
   }
+
+  /* En iOS PWA el status bar queda translúcido sobre esta barra. Alargarla
+     con el inset mantiene el contenido debajo de la Dynamic Island/notch. */
+  .mobile-safe-header {
+    box-sizing: border-box;
+    height: calc(3rem + env(safe-area-inset-top, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+    background-color: #070e20;
+    isolation: isolate;
+  }
+
+  /* En iPhone instalado la zona superior del sistema es translúcida. El
+     cajón cubre también esa zona con el mismo fondo, pero su contenido empieza
+     debajo del notch/Dynamic Island para que no quede oculto por el blur. */
+  .mobile-safe-sidebar {
+    box-sizing: border-box;
+    padding-top: calc(1rem + env(safe-area-inset-top, 0px));
+    background-color: #070e20;
+  }
 }
 
 @layer base {
