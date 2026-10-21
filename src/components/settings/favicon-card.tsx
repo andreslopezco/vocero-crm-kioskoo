@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ImageUp, Trash2 } from "lucide-react";
 import type { Branding } from "@/lib/branding";
 import {
-  faviconHref,
+  logoIconHref,
   FAVICON_MIMES,
   MAX_FAVICON_BYTES,
 } from "@/lib/favicon";
@@ -28,7 +28,7 @@ export function FaviconCard({ branding }: { branding: Branding }) {
   const [rev, setRev] = useState(0);
   const [actual, setActual] = useState(branding.favicon);
 
-  const src = `${faviconHref({ ...branding, favicon: actual })}&r=${rev}`;
+  const src = `${logoIconHref({ ...branding, favicon: actual })}&r=${rev}`;
 
   async function subir(file: File) {
     setError(null);
@@ -77,9 +77,9 @@ export function FaviconCard({ branding }: { branding: Branding }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Logo del CRM y favicon</CardTitle>
+        <CardTitle>Logo del CRM</CardTitle>
         <p className="text-sm text-text-3">
-          Se ve en la pestaña y la barra lateral. El icono de la app instalada se configura por separado abajo.
+          Se ve en la barra lateral. Si no configuras otro favicon, este también se usa en la pestaña del navegador.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
