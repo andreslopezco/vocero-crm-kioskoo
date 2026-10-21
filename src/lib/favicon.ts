@@ -190,9 +190,10 @@ export function appIconHref(
 export function appleTouchIconHref(
   branding: Pick<Branding, "name" | "accent" | "appIcon">
 ): string {
-  // Apple busca este nombre canónico al crear un Web Clip y puede ignorar una
-  // URL con query string durante «Añadir a inicio». La ruta sirve el icono
-  // vigente y revalida caché en cada solicitud.
-  void branding;
-  return "/apple-touch-icon.png";
+  // Conservamos el nombre canónico que Apple busca, pero cambiamos la URL
+  // cuando cambia el icono para invalidar el caché de Web Clips de iOS.
+  const version = branding.appIcon?.version;
+  return version
+    ? `/apple-touch-icon.png?v=${version}-ios180`
+    : "/apple-touch-icon.png";
 }
