@@ -608,7 +608,7 @@ export async function ingestInboundMessage(input: {
   if (pushHabilitado()) {
     void import("@/server/push/service")
       .then(({ notificarMensajeEntrante }) =>
-        notificarMensajeEntrante(organizationId)
+        notificarMensajeEntrante(organizationId, contact.name)
       )
       .catch((err: unknown) => {
         console.warn(
