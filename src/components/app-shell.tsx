@@ -106,16 +106,18 @@ export function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Misma pieza que la barra lateral (`nav-dark`): en el teléfono la
             franja azul marino de arriba es lo que queda del bicolor. */}
-        <header className="mobile-safe-header nav-dark flex shrink-0 items-center gap-1.5 border-b bg-subtle px-2 text-foreground lg:hidden">
-          <button
-            onClick={() => setNavOpen(true)}
-            aria-label="Abrir el menú"
-            aria-expanded={navOpen}
-            className="rounded-md p-2 text-text-2 hover:bg-accent hover:text-foreground"
-          >
-            <Menu className="h-5 w-5" strokeWidth={1.8} />
-          </button>
-          <BrandLogo branding={branding} className="min-w-0" />
+        <header className="mobile-safe-header nav-dark flex shrink-0 items-center border-b bg-subtle px-2 text-foreground lg:hidden">
+          <div className="flex translate-y-3 items-center gap-1.5">
+            <button
+              onClick={() => setNavOpen(true)}
+              aria-label="Abrir el menú"
+              aria-expanded={navOpen}
+              className="rounded-md p-2 text-text-2 hover:bg-accent hover:text-foreground"
+            >
+              <Menu className="h-5 w-5" strokeWidth={1.8} />
+            </button>
+            <BrandLogo branding={branding} className="min-w-0" />
+          </div>
         </header>
 
         <PwaInstallPrompt />
