@@ -35,11 +35,12 @@ export type EventHandlers = {
  * solo; el servidor no garantiza replay, así que al reconectar el consumidor
  * debe refetch con `since=` (onReconnect).
  */
-export function useEvents(handlers: EventHandlers): void {
+export function useEvents(handlers: EventHandlers, enabled = true): void {
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
 
   useEffect(() => {
+    if (!enabled) return;
     const source = new EventSource("/api/events");
     let hadError = false;
 
@@ -79,5 +80,5 @@ export function useEvents(handlers: EventHandlers): void {
     };
 
     return () => source.close();
-  }, []);
+  }, [enabled]);
 }
