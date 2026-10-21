@@ -34,6 +34,7 @@ export const PUT = withAuth(async (session, req: Request) => {
   await saveBranding(session.organizationId, {
     ...body.data,
     favicon: actual.favicon,
+    appIcon: actual.appIcon,
   });
   return Response.json({ ok: true });
 });
