@@ -229,7 +229,7 @@ export function PwaControls({
         const title = "Nuevo mensaje";
         const options = {
           body: "Tienes un mensaje nuevo en tu bandeja.",
-          icon: "/apple-touch-icon.png",
+          icon: "/icon",
           tag: "vocero-local-message",
           data: { path: "/inbox" },
         };

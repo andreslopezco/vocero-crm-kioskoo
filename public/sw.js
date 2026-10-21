@@ -25,8 +25,8 @@ self.addEventListener("push", (event) => {
             typeof payload.body === "string"
               ? payload.body
               : "Tienes un mensaje nuevo en tu bandeja.",
-          icon: "/apple-touch-icon.png",
-          badge: "/apple-touch-icon.png",
+          icon: "/icon",
+          badge: "/icon",
           tag: "vocero-new-message",
           renotify: true,
           data: { path: "/inbox" },

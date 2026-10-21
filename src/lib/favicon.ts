@@ -190,11 +190,10 @@ export function appIconHref(
 export function appleTouchIconHref(
   branding: Pick<Branding, "name" | "accent" | "appIcon">
 ): string {
-  // iOS puede conservar el recurso asociado a una ruta aunque cambie su
-  // query string. El enlace HTML usa una ruta distinta por versión; la ruta
-  // canónica /apple-touch-icon.png queda para la búsqueda automática.
+  // Conservamos el nombre canónico que Apple busca, pero cambiamos la URL
+  // cuando cambia el icono para invalidar el caché de Web Clips de iOS.
   const version = branding.appIcon?.version;
   return version
-    ? `/pwa/apple/${version}-opaque/icon.png`
+    ? `/apple-touch-icon.png?v=${version}-ios180`
     : "/apple-touch-icon.png";
 }

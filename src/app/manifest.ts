@@ -1,12 +1,14 @@
 import type { MetadataRoute } from "next";
 import { DEFAULT_BRANDING } from "@/lib/branding";
+import { appIconHref } from "@/lib/favicon";
 import { getBranding } from "@/server/branding";
 
 export const dynamic = "force-dynamic";
 
 export default async function manifest(): Promise<MetadataRoute.Manifest> {
   const branding = await getBranding().catch(() => DEFAULT_BRANDING);
-  const version = branding.appIcon?.version ?? "default";
+  const customIcon = branding.appIcon !== null;
+  const appIcon = appIconHref(branding);
   return {
     id: "/",
     name: branding.name,
@@ -21,9 +23,11 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
     // La barra superior es azul marino fijo incluso cuando cambia el acento
     // white-label, así que el navegador instalado debe usar el mismo tono.
     theme_color: "#070e20",
-    icons: [
-      { src: `/pwa-icon-192.png?v=${version}`, sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: `/pwa-icon-512.png?v=${version}`, sizes: "512x512", type: "image/png", purpose: "any" },
-    ],
+    icons: customIcon
+      ? [{ src: appIcon, sizes: "512x512", type: "image/png", purpose: "any" }]
+      : [
+          { src: "/icon", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: appIcon, sizes: "180x180", type: "image/png", purpose: "any" },
+        ],
   };
 }
