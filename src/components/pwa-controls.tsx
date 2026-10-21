@@ -12,7 +12,8 @@ type BeforeInstallPromptEvent = Event & {
 type ConfigPush = { enabled: boolean; publicKey: string };
 
 function esIos(): boolean {
-  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+    (/macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 }
 
 function estaInstalada(): boolean {
@@ -96,9 +97,12 @@ export function PwaControls({
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [config, setConfig] = useState<ConfigPush | null>(null);
   const [subscribed, setSubscribed] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
   const audioContext = useRef<AudioContext | null>(null);
+  const serviceWorkerRef = useRef<ServiceWorkerRegistration | null>(null);
   const soundEnabledRef = useRef(false);
+  const pushBusyRef = useRef(false);
   const onActivityRef = useRef(onActivity);
   onActivityRef.current = onActivity;
 
@@ -108,11 +112,14 @@ export function PwaControls({
     setSoundEnabled(soundPreference);
 
     if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
-        if (showControls) {
-          setFeedback("No se pudo preparar el servicio de notificaciones. Revisa que el sitio esté abierto con HTTPS.");
-        }
-      });
+      void navigator.serviceWorker.register("/sw.js", { scope: "/" })
+        .then(() => navigator.serviceWorker.ready)
+        .then((registration) => { serviceWorkerRef.current = registration; })
+        .catch(() => {
+          if (showControls) {
+            setFeedback("No se pudo preparar el servicio de notificaciones. Revisa que el sitio esté abierto con HTTPS.");
+          }
+        });
     }
 
     if (showControls) void fetch("/api/push/config")
@@ -157,9 +164,33 @@ export function PwaControls({
         // El navegador puede no permitir audio hasta la siguiente interacción.
       }
     };
-    if (handleEvents) window.addEventListener("vocero:sound-setting", onSoundSetting);
+    const unlockAudio = () => {
+      if (!soundEnabledRef.current || typeof AudioContext === "undefined") return;
+      try {
+        const context = obtenerContextoAudio(audioContext);
+        if (context.state !== "running") void context.resume().catch(() => {});
+      } catch {
+        // Se volverá a intentar en la próxima interacción o mensaje.
+      }
+    };
+    if (handleEvents) {
+      window.addEventListener("vocero:sound-setting", onSoundSetting);
+      // La preferencia persiste entre sesiones, pero el permiso de audio no:
+      // reanudarlo desde una interacción real evita que quede mudo hasta tocar
+      // el interruptor otra vez, especialmente después de suspender el móvil.
+      window.addEventListener("pointerdown", unlockAudio, { capture: true });
+      window.addEventListener("keydown", unlockAudio, { capture: true });
+      window.addEventListener("pageshow", unlockAudio);
+      document.addEventListener("visibilitychange", unlockAudio);
+    }
     return () => {
-      if (handleEvents) window.removeEventListener("vocero:sound-setting", onSoundSetting);
+      if (handleEvents) {
+        window.removeEventListener("vocero:sound-setting", onSoundSetting);
+        window.removeEventListener("pointerdown", unlockAudio, true);
+        window.removeEventListener("keydown", unlockAudio, true);
+        window.removeEventListener("pageshow", unlockAudio);
+        document.removeEventListener("visibilitychange", unlockAudio);
+      }
     };
 
   }, [handleEvents, showControls]);
@@ -192,6 +223,7 @@ export function PwaControls({
   }, handleEvents);
 
   async function alternarPush() {
+    if (pushBusyRef.current) return;
     if (!window.isSecureContext) {
       setFeedback("Las notificaciones requieren una conexión segura (HTTPS).");
       return;
@@ -204,6 +236,8 @@ export function PwaControls({
       setFeedback("Este navegador no admite notificaciones web push.");
       return;
     }
+    pushBusyRef.current = true;
+    setPushBusy(true);
     try {
       if (!subscribed && esIos() && !estaInstalada()) {
         setFeedback(`En iPhone, primero agrega ${appName} a la pantalla de inicio y ábrelo desde su icono.`);
@@ -223,17 +257,21 @@ export function PwaControls({
         return;
       }
 
-      await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-      const registration = await navigator.serviceWorker.ready;
+      const registration = serviceWorkerRef.current ?? await (async () => {
+        await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+        return navigator.serviceWorker.ready;
+      })();
       const current = await registration.pushManager.getSubscription();
-      if (current) {
-        const response = await fetch("/api/push/subscription", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ endpoint: current.endpoint }),
-        });
-        if (!response.ok) throw new Error(await errorServidor(response, "No se pudo guardar la preferencia"));
-        await current.unsubscribe();
+      if (subscribed) {
+        if (current) {
+          const response = await fetch("/api/push/subscription", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: current.endpoint }),
+          });
+          if (!response.ok) throw new Error(await errorServidor(response, "No se pudo guardar la preferencia"));
+          await current.unsubscribe();
+        }
         setSubscribed(false);
         setFeedback("Notificaciones desactivadas en este dispositivo.");
         return;
@@ -244,14 +282,18 @@ export function PwaControls({
         applicationServerKey: applicationServerKey(config.publicKey),
       });
       let subscription: PushSubscription;
-      try {
-        subscription = await subscribe();
-      } catch (error) {
-        // El servicio push del navegador a veces falla temporalmente al crear
-        // el endpoint. Reintentar una vez evita dejar al usuario sin feedback.
-        if (!errorPush(error)) throw error;
-        await new Promise((resolve) => window.setTimeout(resolve, 1200));
-        subscription = await subscribe();
+      if (current) {
+        // Una suscripción del navegador puede existir sin haberse guardado en
+        // nuestra base de datos. Activar debe registrarla, no revocarla.
+        subscription = current;
+      } else {
+        try {
+          subscription = await subscribe();
+        } catch (error) {
+          if (!errorPush(error)) throw error;
+          await new Promise((resolve) => window.setTimeout(resolve, 1200));
+          subscription = await subscribe();
+        }
       }
       const response = await fetch("/api/push/subscription", {
         method: "POST",
@@ -259,7 +301,7 @@ export function PwaControls({
         body: JSON.stringify(subscription),
       });
       if (!response.ok) {
-        await subscription.unsubscribe();
+        if (!current) await subscription.unsubscribe();
         throw new Error(await errorServidor(response, "No se pudo registrar este dispositivo"));
       }
       setSubscribed(true);
@@ -271,6 +313,9 @@ export function PwaControls({
             ? error.message
             : "No se pudieron configurar las notificaciones. Inténtalo otra vez.")
       );
+    } finally {
+      pushBusyRef.current = false;
+      setPushBusy(false);
     }
   }
 
@@ -307,6 +352,7 @@ export function PwaControls({
           <button
             type="button"
             onClick={() => void alternarPush()}
+            disabled={pushBusy}
             aria-label={subscribed ? "Desactivar notificaciones" : "Activar notificaciones"}
             title={subscribed ? "Desactivar notificaciones" : "Activar notificaciones"}
             className="flex min-w-0 items-center justify-center gap-2 rounded-sm border px-3 py-2.5 text-xs font-semibold text-text-2 hover:bg-accent hover:text-foreground"

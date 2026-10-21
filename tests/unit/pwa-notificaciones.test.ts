@@ -47,7 +47,8 @@ describe("notificaciones push opcionales", () => {
     expect(worker).not.toContain("cache.add");
     expect(worker).toContain("showNotification");
     expect(worker).toContain('"/inbox"');
-    expect(worker).toContain("client.visibilityState !== \"visible\"");
+    expect(worker).toContain('icon: "/apple-touch-icon.png"');
+    expect(worker).not.toContain('icon: "/icon"');
   });
 
   it("el aviso predeterminado no incluye el texto privado de los mensajes", () => {

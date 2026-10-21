@@ -19,7 +19,7 @@ const endpoint = z
     const host = parsed.hostname.toLowerCase();
     const proveedorPermitido =
       host === "fcm.googleapis.com" ||
-      host === "web.push.apple.com" ||
+      host.endsWith(".push.apple.com") ||
       host === "push.services.mozilla.com" ||
       host.endsWith(".push.services.mozilla.com") ||
       host.endsWith(".notify.windows.com");
