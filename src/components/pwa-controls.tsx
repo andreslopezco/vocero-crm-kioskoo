@@ -49,7 +49,17 @@ function sonar(context: AudioContext) {
   }
 }
 
-export function PwaControls({ onActivity }: { onActivity?: () => void }) {
+export function PwaControls({
+  onActivity,
+  showControls = true,
+  handleEvents = true,
+}: {
+  onActivity?: () => void;
+  /** Permite mantener el servicio activo en el cascarón sin pintar controles. */
+  showControls?: boolean;
+  /** Solo una instancia debe escuchar eventos y emitir el sonido. */
+  handleEvents?: boolean;
+}) {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [config, setConfig] = useState<ConfigPush | null>(null);
   const [subscribed, setSubscribed] = useState(false);
@@ -64,13 +74,13 @@ export function PwaControls({ onActivity }: { onActivity?: () => void }) {
     soundEnabledRef.current = soundPreference;
     setSoundEnabled(soundPreference);
 
-    if ("serviceWorker" in navigator) {
+    if (!showControls && "serviceWorker" in navigator) {
       void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
         setFeedback("No se pudo preparar la app instalable en este navegador.");
       });
     }
 
-    void fetch("/api/push/config")
+    if (showControls) void fetch("/api/push/config")
       .then(async (response) => {
         if (!response.ok) return null;
         return (await response.json()) as ConfigPush;
@@ -88,7 +98,25 @@ export function PwaControls({ onActivity }: { onActivity?: () => void }) {
       })
       .catch(() => {});
 
-  }, []);
+    const onSoundSetting = (event: Event) => {
+      const enabled = (event as CustomEvent<{ enabled?: boolean }>).detail?.enabled === true;
+      soundEnabledRef.current = enabled;
+      if (!enabled) return;
+      if (typeof AudioContext === "undefined") return;
+      try {
+        const context = audioContext.current ?? new AudioContext();
+        audioContext.current = context;
+        void context.resume();
+      } catch {
+        // El navegador puede no permitir audio hasta la siguiente interacción.
+      }
+    };
+    if (handleEvents) window.addEventListener("vocero:sound-setting", onSoundSetting);
+    return () => {
+      if (handleEvents) window.removeEventListener("vocero:sound-setting", onSoundSetting);
+    };
+
+  }, [handleEvents, showControls]);
 
   const onMessage = useCallback((data: { message: unknown }) => {
     onActivityRef.current?.();
@@ -100,9 +128,11 @@ export function PwaControls({ onActivity }: { onActivity?: () => void }) {
   }, []);
 
   useEvents({
-    onMessageNew: onMessage,
-    onConversationUpdated: () => onActivityRef.current?.(),
-  });
+    onMessageNew: handleEvents ? onMessage : undefined,
+    onConversationUpdated: handleEvents
+      ? () => onActivityRef.current?.()
+      : undefined,
+  }, handleEvents);
 
   async function alternarPush() {
     if (!config || !("Notification" in window) || !("serviceWorker" in navigator)) {
@@ -165,7 +195,7 @@ export function PwaControls({ onActivity }: { onActivity?: () => void }) {
 
   async function alternarSonido() {
     const next = !soundEnabled;
-    if (next && typeof AudioContext !== "undefined") {
+    if (next && handleEvents && typeof AudioContext !== "undefined") {
       try {
         const context = audioContext.current ?? new AudioContext();
         audioContext.current = context;
@@ -178,21 +208,28 @@ export function PwaControls({ onActivity }: { onActivity?: () => void }) {
     soundEnabledRef.current = next;
     setSoundEnabled(next);
     localStorage.setItem("vocero.soundEnabled.v1", String(next));
+    if (!handleEvents) {
+      window.dispatchEvent(
+        new CustomEvent("vocero:sound-setting", { detail: { enabled: next } })
+      );
+    }
   }
 
+  if (!showControls) return null;
+
   return (
-    <div className="mx-1 mb-2 rounded-md border border-border/70 bg-background/40 p-2">
-      <div className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-3">
+    <div className="mb-4 rounded-md border bg-card p-4">
+      <div className="mb-3 text-sm font-semibold text-foreground">
         Notificaciones y sonido
       </div>
-      <div className="flex gap-1">
+      <div className="flex flex-wrap gap-2">
         {config && (
           <button
             type="button"
             onClick={() => void alternarPush()}
             aria-label={subscribed ? "Desactivar notificaciones" : "Activar notificaciones"}
             title={subscribed ? "Desactivar notificaciones" : "Activar notificaciones"}
-            className="flex min-w-0 flex-1 items-center justify-center gap-1 rounded-sm px-1.5 py-1.5 text-[10.5px] font-semibold text-text-2 hover:bg-accent hover:text-foreground"
+            className="flex min-w-0 items-center justify-center gap-2 rounded-sm border px-3 py-2.5 text-xs font-semibold text-text-2 hover:bg-accent hover:text-foreground"
           >
             {subscribed ? <BellOff className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <Bell className="h-3.5 w-3.5 shrink-0" aria-hidden />}
             <span className="truncate">{subscribed ? "Avisos sí" : "Avisos no"}</span>
@@ -204,14 +241,14 @@ export function PwaControls({ onActivity }: { onActivity?: () => void }) {
           aria-pressed={soundEnabled}
           aria-label={soundEnabled ? "Silenciar mensajes" : "Activar sonido de mensajes"}
           title={soundEnabled ? "Silenciar mensajes" : "Activar sonido de mensajes"}
-          className="flex min-w-0 flex-1 items-center justify-center gap-1 rounded-sm px-1.5 py-1.5 text-[10.5px] font-semibold text-text-2 hover:bg-accent hover:text-foreground"
+          className="flex min-w-0 items-center justify-center gap-2 rounded-sm border px-3 py-2.5 text-xs font-semibold text-text-2 hover:bg-accent hover:text-foreground"
         >
           {soundEnabled ? <Volume2 className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <VolumeX className="h-3.5 w-3.5 shrink-0" aria-hidden />}
           <span className="truncate">{soundEnabled ? "Sonido sí" : "Sonido no"}</span>
         </button>
       </div>
       {feedback && (
-        <p className="mt-1 px-1 text-[10px] leading-snug text-text-3" role="status">
+        <p className="mt-2 text-xs leading-snug text-text-3" role="status">
           {feedback}
         </p>
       )}
