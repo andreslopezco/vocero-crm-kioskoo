@@ -32,6 +32,18 @@ function applicationServerKey(clave: string): ArrayBuffer {
   ) as ArrayBuffer;
 }
 
+async function errorServidor(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await response.json()) as {
+      error?: { message?: unknown };
+    };
+    if (typeof body.error?.message === "string") return body.error.message;
+  } catch {
+    // Respuesta no JSON: se conserva el mensaje de reserva.
+  }
+  return fallback;
+}
+
 function sonar(context: AudioContext) {
   const start = context.currentTime;
   for (const [offset, frequency] of [[0, 740], [0.12, 988]] as const) {
@@ -40,7 +52,7 @@ function sonar(context: AudioContext) {
     oscillator.type = "sine";
     oscillator.frequency.value = frequency;
     gain.gain.setValueAtTime(0.0001, start + offset);
-    gain.gain.exponentialRampToValueAtTime(0.24, start + offset + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.5, start + offset + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + offset + 0.16);
     oscillator.connect(gain);
     gain.connect(context.destination);
@@ -74,19 +86,31 @@ export function PwaControls({
     soundEnabledRef.current = soundPreference;
     setSoundEnabled(soundPreference);
 
-    if (!showControls && "serviceWorker" in navigator) {
+    if ("serviceWorker" in navigator) {
       void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
-        setFeedback("No se pudo preparar la app instalable en este navegador.");
+        if (showControls) {
+          setFeedback("No se pudo preparar el servicio de notificaciones. Revisa que el sitio esté abierto con HTTPS.");
+        }
       });
     }
 
     if (showControls) void fetch("/api/push/config")
       .then(async (response) => {
-        if (!response.ok) return null;
+        if (!response.ok) {
+          setFeedback(
+            response.status === 404
+              ? "Las notificaciones push no están habilitadas en este entorno."
+              : "No se pudo consultar la configuración de notificaciones."
+          );
+          return null;
+        }
         return (await response.json()) as ConfigPush;
       })
       .then((nextConfig) => {
-        if (!nextConfig?.enabled || !nextConfig.publicKey) return;
+        if (!nextConfig?.enabled || !nextConfig.publicKey) {
+          setFeedback("Las notificaciones push no están habilitadas en este entorno.");
+          return;
+        }
         setConfig(nextConfig);
         if ("serviceWorker" in navigator && "PushManager" in window) {
           return navigator.serviceWorker.ready.then((registration) =>
@@ -96,7 +120,9 @@ export function PwaControls({
           );
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setFeedback("No se pudo consultar la configuración de notificaciones.");
+      });
 
     const onSoundSetting = (event: Event) => {
       const enabled = (event as CustomEvent<{ enabled?: boolean }>).detail?.enabled === true;
@@ -135,12 +161,39 @@ export function PwaControls({
   }, handleEvents);
 
   async function alternarPush() {
-    if (!config || !("Notification" in window) || !("serviceWorker" in navigator)) {
-      setFeedback("Este navegador no admite notificaciones web.");
+    if (!window.isSecureContext) {
+      setFeedback("Las notificaciones requieren una conexión segura (HTTPS).");
+      return;
+    }
+    if (!config) {
+      setFeedback("No se pudo cargar la configuración de notificaciones del servidor.");
+      return;
+    }
+    if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setFeedback("Este navegador no admite notificaciones web push.");
       return;
     }
     try {
-      const registration = await navigator.serviceWorker.ready;
+      if (!subscribed && esIos() && !estaInstalada()) {
+        setFeedback("En iPhone, primero agrega Vocero a la pantalla de inicio y ábrelo desde su icono.");
+        return;
+      }
+      // Si el permiso aún no está decidido, solicitarlo antes de cualquier
+      // operación asíncrona para conservar la activación del clic del usuario.
+      if (!subscribed && Notification.permission === "denied") {
+        setFeedback("Las notificaciones están bloqueadas para este sitio. Permítelas desde el icono junto a la dirección del navegador y vuelve a intentar.");
+        return;
+      }
+      const permission = !subscribed && Notification.permission !== "granted"
+        ? await Notification.requestPermission()
+        : Notification.permission;
+      if (!subscribed && permission !== "granted") {
+        setFeedback("No se concedió el permiso. Acepta las notificaciones del sitio para poder activarlas.");
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      await navigator.serviceWorker.ready;
       const current = await registration.pushManager.getSubscription();
       if (current) {
         const response = await fetch("/api/push/subscription", {
@@ -148,28 +201,10 @@ export function PwaControls({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ endpoint: current.endpoint }),
         });
-        if (!response.ok) throw new Error("No se pudo guardar la preferencia");
+        if (!response.ok) throw new Error(await errorServidor(response, "No se pudo guardar la preferencia"));
         await current.unsubscribe();
         setSubscribed(false);
         setFeedback("Notificaciones desactivadas en este dispositivo.");
-        return;
-      }
-
-      if (esIos() && !estaInstalada()) {
-        setFeedback("En iPhone, primero agrega Vocero a la pantalla de inicio y ábrelo desde su icono.");
-        return;
-      }
-
-      const permission =
-        Notification.permission === "granted"
-          ? "granted"
-          : await Notification.requestPermission();
-      if (permission !== "granted") {
-        setFeedback(
-          permission === "denied"
-            ? "El permiso está bloqueado en el navegador; habilítalo en la configuración del sitio."
-            : "No se activaron las notificaciones."
-        );
         return;
       }
 
@@ -184,12 +219,12 @@ export function PwaControls({
       });
       if (!response.ok) {
         await subscription.unsubscribe();
-        throw new Error("No se pudo registrar este dispositivo");
+        throw new Error(await errorServidor(response, "No se pudo registrar este dispositivo"));
       }
       setSubscribed(true);
       setFeedback("Notificaciones activadas para este dispositivo.");
-    } catch {
-      setFeedback("No se pudieron configurar las notificaciones. Inténtalo otra vez.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "No se pudieron configurar las notificaciones. Inténtalo otra vez.");
     }
   }
 
