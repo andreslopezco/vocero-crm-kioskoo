@@ -172,9 +172,10 @@ export function AppNav({
         ))}
       </nav>
 
-      <div className="mt-3">
-        <PwaControls onActivity={() => void refetchUnread()} />
-      </div>
+      <PwaControls
+        onActivity={() => void refetchUnread()}
+        showControls={false}
+      />
 
       <div className="flex-1" />
 
