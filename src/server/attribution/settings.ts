@@ -97,6 +97,18 @@ export async function saveCapiSettings(input: {
     });
 }
 
+/** Guarda el dataset confirmado por el WABA sin volver a cifrar el token. */
+export async function updateCapiDatasetId(
+  organizationId: string,
+  datasetId: string
+): Promise<void> {
+  const db = getDb();
+  await db
+    .update(schema.capiSettings)
+    .set({ datasetId, status: "connected", updatedAt: new Date() })
+    .where(scoped(schema.capiSettings.organizationId, organizationId));
+}
+
 export async function deleteCapiSettings(
   organizationId: string
 ): Promise<void> {
