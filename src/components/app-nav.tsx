@@ -9,7 +9,7 @@ import type { ThemePreference } from "@/lib/theme";
 import { cn, initials } from "@/lib/utils";
 import { appNavGroups, isNavActive, SETTINGS_ITEM, type NavItem } from "@/lib/nav";
 import { signOut } from "@/lib/auth/client";
-import { useEvents } from "@/components/use-events";
+import { PwaControls } from "@/components/pwa-controls";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BrandLogo } from "@/components/brand-mark";
 import {
@@ -93,11 +93,6 @@ export function AppNav({
     void refetchUnread();
   }, []);
 
-  useEvents({
-    onMessageNew: () => void refetchUnread(),
-    onConversationUpdated: () => void refetchUnread(),
-  });
-
   const version = commit ?? { commit: BUILD_COMMIT, verified: BUILD_COMMIT !== "" };
   // #87 — Qué hay en el menú y en qué grupo lo decide `appNavGroups`; aquí
   // solo se pinta.
@@ -176,6 +171,10 @@ export function AppNav({
           </div>
         ))}
       </nav>
+
+      <div className="mt-3">
+        <PwaControls onActivity={() => void refetchUnread()} />
+      </div>
 
       <div className="flex-1" />
 

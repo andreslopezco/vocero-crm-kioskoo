@@ -38,6 +38,7 @@ const prefixes = {
   dropiOrderSubmission: "dorder",
   dropiOrderLink: "dlink",
   dropiOrderSync: "dsync",
+  pushSubscription: "push",
   // 021 — despacho al cerebro
   dispatch: "dsp",
   // 026 — el aviso de que una conversación se eliminó

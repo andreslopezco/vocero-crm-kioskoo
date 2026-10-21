@@ -183,6 +183,13 @@
       "when": 1792461000000,
       "tag": "0025_dropi_order_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792550158963,
+      "tag": "0026_tense_nova",
+      "breakpoints": true
     }
   ]
 }

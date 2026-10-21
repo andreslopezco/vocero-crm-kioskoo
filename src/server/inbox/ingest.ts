@@ -27,6 +27,7 @@ import {
 import { registrarAnuncioDeOrigen } from "@/server/attribution/store";
 import { onLeadActivity } from "@/server/inbox/lead-activity";
 import { maybeRunAgentTurn } from "@/server/ai/trigger";
+import { pushHabilitado } from "@/server/push/flag";
 
 /** Tipos de contenido soportados; el resto se ignora sin error. */
 const SUPPORTED_TYPES = new Set([
@@ -602,6 +603,20 @@ export async function ingestInboundMessage(input: {
       message: serializeMessage(message, asset),
     },
   });
+  // 034 — el aviso push es mejor esfuerzo y no debe frenar ingesta ni IA.
+  // Se importa el adaptador solo si el conector está encendido y configurado.
+  if (pushHabilitado()) {
+    void import("@/server/push/service")
+      .then(({ notificarMensajeEntrante }) =>
+        notificarMensajeEntrante(organizationId)
+      )
+      .catch((err: unknown) => {
+        console.warn(
+          "[push] no se pudo preparar el aviso del mensaje entrante:",
+          err instanceof Error ? err.message : "error desconocido"
+        );
+      });
+  }
   publish(organizationId, {
     type: "conversation.updated",
     data: { conversation: { id: conversation.id } },

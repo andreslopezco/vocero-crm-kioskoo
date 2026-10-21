@@ -43,6 +43,11 @@ export const envSchema = z.object({
   // 033: MCP de Dropi para preparar pedidos. Apagado por defecto.
   DROPI_ORDERS: z.string().optional(),
   DROPI_MCP_URL: z.string().url().default("https://mcp.dropi.co/mcp"),
+  // 034: notificaciones Web Push, opcionales y apagadas por defecto.
+  PUSH_NOTIFICATIONS: z.string().optional(),
+  PUSH_VAPID_PUBLIC_KEY: z.string().optional(),
+  PUSH_VAPID_PRIVATE_KEY: z.string().optional(),
+  PUSH_VAPID_SUBJECT: z.string().optional(),
   // 015: bases de los conectores. Solo se sobreescriben para apuntar a los
   // mocks en el self-test; en producción se usan las reales.
   ZOOM_BASE_URL: z.string().url().default("https://api.zoom.us/v2"),
