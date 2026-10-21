@@ -244,7 +244,10 @@
      debajo del notch/Dynamic Island para que no quede oculto por el blur. */
   .mobile-safe-sidebar {
     box-sizing: border-box;
-    padding-top: calc(1rem + env(safe-area-inset-top, 0px));
+    /* El blur nativo del status bar en iOS se extiende un poco más abajo que
+       el safe-area. Dejamos el logo por debajo de esa transición para que no
+       se vea suavizado al abrir el menú. */
+    padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
     background-color: #070e20;
   }
 }
