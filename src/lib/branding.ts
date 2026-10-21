@@ -42,6 +42,8 @@ export type Branding = {
   currency: Currency;
   /** `null` = se dibuja con la inicial sobre el acento (ver `lib/favicon`). */
   favicon: BrandingFavicon | null;
+  /** PNG cuadrado para instalar en Android/iOS; independiente del logo del CRM. */
+  appIcon: BrandingFavicon | null;
 };
 
 export const DEFAULT_BRANDING: Branding = {
@@ -51,6 +53,7 @@ export const DEFAULT_BRANDING: Branding = {
   accent: "#0d5bff",
   currency: DEFAULT_CURRENCY,
   favicon: null,
+  appIcon: null,
 };
 
 /**
@@ -290,5 +293,10 @@ export function normalizeBranding(input: Partial<Branding> | null): Branding {
     f && typeof f.mime === "string" && Number.isFinite(f.version)
       ? { mime: f.mime, version: Math.max(1, Math.floor(f.version)) }
       : null;
-  return { name, accent, currency, favicon };
+  const a = input?.appIcon;
+  const appIcon =
+    a && a.mime === "image/png" && Number.isFinite(a.version)
+      ? { mime: a.mime, version: Math.max(1, Math.floor(a.version)) }
+      : null;
+  return { name, accent, currency, favicon, appIcon };
 }
