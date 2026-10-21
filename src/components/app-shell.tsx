@@ -8,6 +8,7 @@ import type { ThemePreference } from "@/lib/theme";
 import type { ResolvedCommit } from "@/lib/version";
 import { AppNav } from "@/components/app-nav";
 import { BrandLogo } from "@/components/brand-mark";
+import { PwaInstallPrompt } from "@/components/pwa-controls";
 
 /**
  * Cascarón de la app en dos modos:
@@ -116,6 +117,8 @@ export function AppShell({
           </button>
           <BrandLogo branding={branding} className="min-w-0" />
         </header>
+
+        <PwaInstallPrompt />
 
         {aviso}
 
