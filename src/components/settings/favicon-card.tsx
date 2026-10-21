@@ -77,9 +77,9 @@ export function FaviconCard({ branding }: { branding: Branding }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Logo del negocio</CardTitle>
+        <CardTitle>Logo del CRM y favicon</CardTitle>
         <p className="text-sm text-text-3">
-          Se ve en la pestaña del navegador y en la barra lateral del CRM.
+          Se ve en la pestaña y la barra lateral. El icono de la app instalada se configura por separado abajo.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
