@@ -27,6 +27,7 @@ import { resolveAccentSet, type Branding } from "./branding";
  * handlers como exports de un `route.ts` — cualquier otra cosa rompe el build.
  */
 export const FAVICON_ASSET = "favicon";
+export const APP_ICON_ASSET = "app-icon";
 
 /** Lo que el navegador acepta como icono y nosotros sabemos verificar. */
 export const FAVICON_MIMES = [
@@ -160,4 +161,13 @@ export function faviconHref(
   branding: Pick<Branding, "name" | "accent" | "favicon">
 ): string {
   return `/api/branding/favicon?v=${faviconCacheKey(branding)}`;
+}
+
+/** URL versionada del icono propio de la app (Android y Apple). */
+export function appIconHref(
+  branding: Pick<Branding, "name" | "accent" | "appIcon">
+): string {
+  return branding.appIcon
+    ? `/api/branding/app-icon?v=${branding.appIcon.version}`
+    : "/apple-icon";
 }
