@@ -27,6 +27,7 @@ import { resolveAccentSet, type Branding } from "./branding";
  * handlers como exports de un `route.ts` — cualquier otra cosa rompe el build.
  */
 export const FAVICON_ASSET = "favicon";
+export const TAB_ICON_ASSET = "tab-icon";
 export const APP_ICON_ASSET = "app-icon";
 
 /** Lo que el navegador acepta como icono y nosotros sabemos verificar. */
@@ -145,8 +146,9 @@ function voceroFaviconSvg(from: string, to: string): string {
  * son justo lo que lo cambia.
  */
 export function faviconCacheKey(
-  branding: Pick<Branding, "name" | "accent" | "favicon">
+  branding: Pick<Branding, "name" | "accent" | "favicon" | "tabIcon">
 ): string {
+  if (branding.tabIcon) return `t${branding.tabIcon.version}`;
   if (branding.favicon) return `u${branding.favicon.version}`;
   let h = 0;
   const semilla = `${branding.name}|${branding.accent}`;
@@ -158,9 +160,17 @@ export function faviconCacheKey(
 
 /** URL que va en el `<link rel="icon">`. */
 export function faviconHref(
-  branding: Pick<Branding, "name" | "accent" | "favicon">
+  branding: Pick<Branding, "name" | "accent" | "favicon" | "tabIcon">
 ): string {
   return `/api/branding/favicon?v=${faviconCacheKey(branding)}`;
+}
+
+/** URL del logo legado para la marca del CRM, aunque haya un favicon aparte. */
+export function logoIconHref(
+  branding: Pick<Branding, "name" | "accent" | "favicon">
+): string {
+  const version = branding.favicon?.version ?? faviconCacheKey({ ...branding, tabIcon: null });
+  return `/api/branding/favicon?logo=1&v=${version}`;
 }
 
 /** URL versionada del icono propio de la app (Android y Apple). */
