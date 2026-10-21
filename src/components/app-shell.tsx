@@ -105,7 +105,7 @@ export function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Misma pieza que la barra lateral (`nav-dark`): en el teléfono la
             franja azul marino de arriba es lo que queda del bicolor. */}
-        <header className="nav-dark flex h-12 shrink-0 items-center gap-1.5 border-b bg-subtle px-2 text-foreground lg:hidden">
+        <header className="mobile-safe-header nav-dark flex shrink-0 items-center gap-1.5 border-b bg-subtle px-2 text-foreground lg:hidden">
           <button
             onClick={() => setNavOpen(true)}
             aria-label="Abrir el menú"

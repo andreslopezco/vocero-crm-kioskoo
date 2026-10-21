@@ -17,7 +17,9 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],
     background_color: "#f6f8fc",
-    theme_color: branding.accent,
+    // La barra superior es azul marino fijo incluso cuando cambia el acento
+    // white-label, así que el navegador instalado debe usar el mismo tono.
+    theme_color: "#070e20",
     icons: [
       { src: "/icon", sizes: "512x512", type: "image/png", purpose: "any" },
       { src: "/icon", sizes: "512x512", type: "image/png", purpose: "maskable" },

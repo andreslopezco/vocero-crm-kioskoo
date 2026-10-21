@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { Archivo, IBM_Plex_Mono, Instrument_Serif } from "next/font/google";
 import { accentCssVariables, DEFAULT_BRANDING } from "@/lib/branding";
@@ -32,6 +32,14 @@ const plexMono = IBM_Plex_Mono({
 
 export const dynamic = "force-dynamic";
 
+// El área segura superior de iOS usa el color de la barra fija del CRM.
+// `viewportFit: cover` permite que la franja del sistema quede detrás de la
+// PWA; el encabezado móvil reserva el inset para que el contenido no se tape.
+export const viewport: Viewport = {
+  themeColor: "#070e20",
+  viewportFit: "cover",
+};
+
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await getBranding().catch(() => DEFAULT_BRANDING);
   const producto = productName([...enabledChannels()]);
@@ -42,7 +50,7 @@ export async function generateMetadata(): Promise<Metadata> {
     appleWebApp: {
       capable: true,
       title: branding.name,
-      statusBarStyle: "default",
+      statusBarStyle: "black-translucent",
     },
     // El `?v=` cambia con la marca: los navegadores guardan el favicon con una
     // insistencia notable y, sin eso, el logo nuevo tarda días en aparecer.
