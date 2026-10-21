@@ -235,6 +235,17 @@
     box-sizing: border-box;
     height: calc(3rem + env(safe-area-inset-top, 0px));
     padding-top: env(safe-area-inset-top, 0px);
+    background-color: #070e20;
+    isolation: isolate;
+  }
+
+  /* En iPhone instalado la zona superior del sistema es translúcida. El
+     cajón cubre también esa zona con el mismo fondo, pero su contenido empieza
+     debajo del notch/Dynamic Island para que no quede oculto por el blur. */
+  .mobile-safe-sidebar {
+    box-sizing: border-box;
+    padding-top: calc(1rem + env(safe-area-inset-top, 0px));
+    background-color: #070e20;
   }
 }
 
