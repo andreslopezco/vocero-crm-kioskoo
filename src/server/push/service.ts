@@ -85,7 +85,8 @@ export async function revocarSuscripcion(input: {
  * la respuesta de IA.
  */
 export async function notificarMensajeEntrante(
-  organizationId: string
+  organizationId: string,
+  nombreContacto?: string | null
 ): Promise<void> {
   if (!pushHabilitado()) return;
   configurarVapid();
@@ -94,6 +95,9 @@ export async function notificarMensajeEntrante(
     .select()
     .from(schema.pushSubscription)
     .where(eq(schema.pushSubscription.organizationId, organizationId));
+
+  const nombre = nombreContacto?.trim().slice(0, 70);
+  const titulo = nombre ? `Nuevo mensaje de ${nombre}` : "Nuevo mensaje";
 
   await Promise.all(
     filas.map(async (fila) => {
@@ -116,7 +120,7 @@ export async function notificarMensajeEntrante(
         await webpush.sendNotification(
           subscription as WebPushSubscription,
           JSON.stringify({
-            title: "Nuevo mensaje",
+            title: titulo,
             body: "Tienes un mensaje nuevo en tu bandeja.",
           }),
           { TTL: 90 }
