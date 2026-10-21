@@ -179,5 +179,5 @@ export function appIconHref(
 ): string {
   return branding.appIcon
     ? `/api/branding/app-icon?v=${branding.appIcon.version}`
-    : "/apple-icon";
+    : "/api/branding/app-icon";
 }

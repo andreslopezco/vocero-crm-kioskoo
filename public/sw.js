@@ -15,20 +15,9 @@ self.addEventListener("push", (event) => {
 
   event.waitUntil(
     (async () => {
-      const windows = await self.clients.matchAll({
-        type: "window",
-        includeUncontrolled: true,
-      });
-      if (
-        windows.some((client) => {
-          if (client.visibilityState !== "visible") return false;
-          const path = new URL(client.url).pathname;
-          return path !== "/login" && path !== "/register";
-        })
-      ) {
-        return;
-      }
-
+      // Una suscripción explícita significa que el usuario pidió avisos del
+      // sistema. No descartarlos por tener una pestaña abierta: Safari puede
+      // mantener una ventana visible aunque la PWA no esté al frente.
       await self.registration.showNotification(
         typeof payload.title === "string" ? payload.title : "Nuevo mensaje",
         {

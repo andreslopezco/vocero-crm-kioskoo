@@ -27,7 +27,7 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
       ? [{ src: appIcon, sizes: "512x512", type: "image/png", purpose: "any" }]
       : [
           { src: "/icon", sizes: "512x512", type: "image/png", purpose: "any" },
-          { src: "/apple-icon", sizes: "180x180", type: "image/png", purpose: "any" },
+          { src: appIcon, sizes: "180x180", type: "image/png", purpose: "any" },
         ],
   };
 }

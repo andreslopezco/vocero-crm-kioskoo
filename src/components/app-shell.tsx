@@ -8,7 +8,7 @@ import type { ThemePreference } from "@/lib/theme";
 import type { ResolvedCommit } from "@/lib/version";
 import { AppNav } from "@/components/app-nav";
 import { BrandLogo } from "@/components/brand-mark";
-import { PwaInstallPrompt } from "@/components/pwa-controls";
+import { PwaControls, PwaInstallPrompt } from "@/components/pwa-controls";
 
 /**
  * Cascarón de la app en dos modos:
@@ -80,6 +80,10 @@ export function AppShell({
 
   return (
     <div className="flex h-dvh overflow-hidden bg-background">
+      {/* El oyente global de eventos vive en el cascarón, no dentro del menú
+          lateral: así sigue activo aunque el cajón móvil esté cerrado. */}
+      <PwaControls appName={branding.name} showControls={false} />
+
       {navOpen && (
         <button
           aria-label="Cerrar el menú"

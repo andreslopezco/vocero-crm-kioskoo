@@ -9,7 +9,7 @@ import type { ThemePreference } from "@/lib/theme";
 import { cn, initials } from "@/lib/utils";
 import { appNavGroups, isNavActive, SETTINGS_ITEM, type NavItem } from "@/lib/nav";
 import { signOut } from "@/lib/auth/client";
-import { PwaControls } from "@/components/pwa-controls";
+import { useEvents } from "@/components/use-events";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BrandLogo } from "@/components/brand-mark";
 import {
@@ -88,6 +88,13 @@ export function AppNav({
     };
     setUnread(data.conversations.reduce((a, c) => a + c.unreadCount, 0));
   }
+
+  // El contador del menú solo necesita refrescarse con actividad; el oyente
+  // de sonido/notificaciones vive de forma global en AppShell.
+  useEvents({
+    onMessageNew: () => void refetchUnread(),
+    onConversationUpdated: () => void refetchUnread(),
+  });
 
   useEffect(() => {
     void refetchUnread();
@@ -171,12 +178,6 @@ export function AppNav({
           </div>
         ))}
       </nav>
-
-      <PwaControls
-        onActivity={() => void refetchUnread()}
-        appName={branding.name}
-        showControls={false}
-      />
 
       <div className="flex-1" />
 

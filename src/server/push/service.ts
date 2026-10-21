@@ -96,9 +96,15 @@ export async function notificarMensajeEntrante(
     .from(schema.pushSubscription)
     .where(eq(schema.pushSubscription.organizationId, organizationId));
 
+  if (filas.length === 0) {
+    console.warn("[push] mensaje entrante sin dispositivos suscritos para la organización");
+    return;
+  }
+
   const nombre = nombreContacto?.trim().slice(0, 70);
   const titulo = nombre ? `Nuevo mensaje de ${nombre}` : "Nuevo mensaje";
 
+  let enviados = 0;
   await Promise.all(
     filas.map(async (fila) => {
       let subscription: SuscripcionWebPush;
@@ -125,6 +131,7 @@ export async function notificarMensajeEntrante(
           }),
           { TTL: 90 }
         );
+        enviados += 1;
       } catch (error) {
         const statusCode =
           typeof error === "object" && error !== null && "statusCode" in error
@@ -134,10 +141,12 @@ export async function notificarMensajeEntrante(
           await db
             .delete(schema.pushSubscription)
             .where(eq(schema.pushSubscription.id, fila.id));
+          console.warn(`[push] suscripción vencida eliminada (HTTP ${statusCode})`);
           return;
         }
         console.warn(`[push] no se pudo entregar un aviso (HTTP ${statusCode || "?"})`);
       }
     })
   );
+  console.info(`[push] avisos entregados: ${enviados}/${filas.length}`);
 }
