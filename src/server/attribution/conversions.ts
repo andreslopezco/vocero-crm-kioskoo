@@ -2,10 +2,17 @@ import { and, desc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
-import { sendBusinessMessagingEvent } from "@/lib/meta/capi";
+import {
+  ensureWhatsAppDataset,
+  sendBusinessMessagingEvent,
+} from "@/lib/meta/capi";
+import { MetaApiError } from "@/lib/meta/client";
 import { getCredentialsByOrg } from "@/server/whatsapp/credentials";
 import { atribucionEnabled } from "@/server/attribution/flag";
-import { getCapiSettings } from "@/server/attribution/settings";
+import {
+  getCapiSettings,
+  updateCapiDatasetId,
+} from "@/server/attribution/settings";
 import { getAttributionForConversation } from "@/server/attribution/store";
 
 /**
@@ -90,8 +97,19 @@ export async function emitConversion(
     }
 
     try {
+      // El dataset válido es el que Meta devuelve para ESTE WABA. Un ID pegado
+      // desde Events Manager puede ser un dataset genérico y Meta lo rechaza
+      // con "Invalid parameter" aunque el token tenga permisos.
+      const datasetId = await ensureWhatsAppDataset({
+        wabaId: credentials.wabaId,
+        token: settings.token,
+      });
+      if (datasetId !== settings.datasetId) {
+        await updateCapiDatasetId(organizationId, datasetId);
+      }
+
       const ack = await sendBusinessMessagingEvent({
-        datasetId: settings.datasetId,
+        datasetId,
         token: settings.token,
         event: {
           eventName,
@@ -113,16 +131,23 @@ export async function emitConversion(
         .where(eq(schema.conversionEvent.id, event.id));
       return "sent";
     } catch (err) {
+      const error =
+        err instanceof MetaApiError
+          ? err.diagnosticMessage
+          : err instanceof Error
+            ? err.message
+            : String(err);
       await db
         .update(schema.conversionEvent)
         .set({
           status: "failed",
           attributionId: attribution.id,
-          error: err instanceof Error ? err.message : String(err),
+          fbTraceId: err instanceof MetaApiError ? err.fbTraceId : null,
+          error,
         })
         .where(eq(schema.conversionEvent.id, event.id));
       console.warn(
-        `[capi] fallo al reportar ${eventName} de ${conversationId}: ${err}`
+        `[capi] fallo al reportar ${eventName} de ${conversationId}: ${error}`
       );
       return "failed";
     }
@@ -135,24 +160,25 @@ export async function emitConversion(
 }
 
 /**
- * `custom_data` de un `Purchase` a partir del monto del trato. Pura y exportada
- * para fijar en un test la conversión centavos → unidades: Meta espera unidades
- * de la moneda (450.50) y la base guarda centavos enteros (45050).
- *
- * Sin monto (o en cero) devuelve solo la etapa: la venta se cuenta igual, pero
- * sin precio. Mandar `value: 0` no significa "no sé cuánto" — le enseña al
- * optimizador que las ventas de este negocio valen nada.
+ * `custom_data` de un `Purchase` a partir del monto del trato. Meta exige
+ * tanto `value` como `currency`; si falta uno, no se fabrica una venta
+ * inválida y el llamador conserva la posibilidad de reportarla después.
  */
 export function purchaseCustomData(amount: {
   amountCents: number | null;
   currency: string | null;
-}): Record<string, unknown> {
-  const base = { lead_stage: "won" };
-  if (amount.amountCents === null || amount.amountCents <= 0) return base;
+}): Record<string, unknown> | null {
+  const currency = amount.currency?.trim().toUpperCase() ?? "";
+  if (
+    amount.amountCents === null ||
+    amount.amountCents <= 0 ||
+    !/^[A-Z]{3}$/.test(currency)
+  ) {
+    return null;
+  }
   return {
-    ...base,
     value: amount.amountCents / 100,
-    ...(amount.currency ? { currency: amount.currency } : {}),
+    currency,
   };
 }
 
@@ -218,20 +244,29 @@ export async function reportStageChange(input: {
     if (!row) return;
 
     if (isWon) {
+      const customData = purchaseCustomData(row);
+      if (!customData) {
+        console.warn(
+          `[capi] Purchase de ${row.conversationId} no reportado: ` +
+            "falta un monto positivo o una moneda ISO 4217"
+        );
+        return;
+      }
       await emitConversion(
         input.organizationId,
         row.conversationId,
         PURCHASE_EVENT,
-        purchaseCustomData(row)
+        customData
       );
       return;
     }
 
+    // QualifiedLead no requiere custom_data: se envía el payload mínimo que
+    // documenta Meta para conversiones de mensajería.
     await emitConversion(
       input.organizationId,
       row.conversationId,
-      QUALIFIED_EVENT,
-      { lead_stage: "qualified" }
+      QUALIFIED_EVENT
     );
   } catch (err) {
     console.warn(`[capi] reportStageChange(${input.leadId}) falló: ${err}`);
