@@ -233,7 +233,7 @@
      con el inset mantiene el contenido debajo de la Dynamic Island/notch. */
   .mobile-safe-header {
     box-sizing: border-box;
-    height: calc(3rem + env(safe-area-inset-top, 0px));
+    height: calc(4rem + env(safe-area-inset-top, 0px));
     padding-top: env(safe-area-inset-top, 0px);
     background-color: #070e20;
     isolation: isolate;
