@@ -82,10 +82,12 @@ function sonar(context: AudioContext) {
 
 export function PwaControls({
   onActivity,
+  appName = "Vocero",
   showControls = true,
   handleEvents = true,
 }: {
   onActivity?: () => void;
+  appName?: string;
   /** Permite mantener el servicio activo en el cascarón sin pintar controles. */
   showControls?: boolean;
   /** Solo una instancia debe escuchar eventos y emitir el sonido. */
@@ -204,7 +206,7 @@ export function PwaControls({
     }
     try {
       if (!subscribed && esIos() && !estaInstalada()) {
-        setFeedback("En iPhone, primero agrega Vocero a la pantalla de inicio y ábrelo desde su icono.");
+        setFeedback(`En iPhone, primero agrega ${appName} a la pantalla de inicio y ábrelo desde su icono.`);
         return;
       }
       // Si el permiso aún no está decidido, solicitarlo antes de cualquier
@@ -348,7 +350,7 @@ function esTelefono(): boolean {
 }
 
 /** Aviso de instalación solo en teléfono, dentro del navegador y sin PWA instalada. */
-export function PwaInstallPrompt() {
+export function PwaInstallPrompt({ appName = "Vocero" }: { appName?: string }) {
   const [visible, setVisible] = useState(false);
   const [ios, setIos] = useState(false);
   const [instructions, setInstructions] = useState(false);
@@ -408,12 +410,12 @@ export function PwaInstallPrompt() {
   return (
     <aside
       className="mx-3 my-2 flex items-start gap-3 rounded-md border border-brand/20 bg-brand-tint p-3 text-brand-text shadow-sm sm:mx-4 md:hidden"
-      aria-label="Instala Vocero en tu celular"
+      aria-label={`Instala ${appName} en tu celular`}
       role="region"
     >
       <Download className="mt-0.5 h-5 w-5 shrink-0 text-brand" aria-hidden />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">Instala Vocero en tu celular</p>
+        <p className="text-sm font-semibold">Instala {appName} en tu celular</p>
         <p className="mt-0.5 text-xs leading-relaxed text-text-2">
           Ábrelo como una aplicación y recibe avisos de nuevos mensajes.
         </p>
