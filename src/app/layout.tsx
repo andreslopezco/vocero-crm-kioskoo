@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { Archivo, IBM_Plex_Mono, Instrument_Serif } from "next/font/google";
 import { accentCssVariables, DEFAULT_BRANDING } from "@/lib/branding";
-import { appIconHref, faviconHref } from "@/lib/favicon";
+import { appleTouchIconHref, faviconHref } from "@/lib/favicon";
 import { normalizeThemePreference, THEME_COOKIE } from "@/lib/theme";
 import { getBranding } from "@/server/branding";
 import { enabledChannels } from "@/server/channels/enabled";
@@ -54,7 +54,7 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     // El `?v=` cambia con la marca: los navegadores guardan el favicon con una
     // insistencia notable y, sin eso, el logo nuevo tarda días en aparecer.
-    icons: { icon: faviconHref(branding), apple: appIconHref(branding) },
+    icons: { icon: faviconHref(branding), apple: appleTouchIconHref(branding) },
   };
 }
 

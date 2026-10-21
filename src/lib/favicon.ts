@@ -181,3 +181,17 @@ export function appIconHref(
     ? `/api/branding/app-icon?v=${branding.appIcon.version}`
     : "/api/branding/app-icon";
 }
+
+/**
+ * Ruta con el nombre estándar que Safari busca para los accesos de inicio.
+ * Aunque el `<link rel="apple-touch-icon">` apunte a una URL API válida,
+ * iOS puede ignorar esa URL al crear un web clip y caer en su icono genérico.
+ */
+export function appleTouchIconHref(
+  branding: Pick<Branding, "name" | "accent" | "appIcon">
+): string {
+  const version = branding.appIcon?.version;
+  return version
+    ? `/apple-touch-icon.png?v=${version}`
+    : "/apple-touch-icon.png";
+}
