@@ -118,7 +118,7 @@ export function AppShell({
           <BrandLogo branding={branding} className="min-w-0" />
         </header>
 
-        <PwaInstallPrompt />
+        <PwaInstallPrompt appName={branding.name} />
 
         {aviso}
 
