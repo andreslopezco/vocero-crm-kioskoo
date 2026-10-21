@@ -1,7 +1,7 @@
 import { readMediaFile } from "@/server/whatsapp/media";
 import { getBrandingContext } from "@/server/branding";
 import { DEFAULT_BRANDING } from "@/lib/branding";
-import { FAVICON_ASSET, generatedFaviconSvg } from "@/lib/favicon";
+import { FAVICON_ASSET, TAB_ICON_ASSET, generatedFaviconSvg } from "@/lib/favicon";
 
 export const dynamic = "force-dynamic";
 
@@ -33,16 +33,20 @@ function cabeceras(mime: string, cacheable: boolean): HeadersInit {
  * secreto.
  */
 export async function GET(req: Request) {
-  const cacheable = new URL(req.url).searchParams.has("v");
+  const params = new URL(req.url).searchParams;
+  const cacheable = params.has("v");
+  const logoOnly = params.has("logo");
 
   const ctx = await getBrandingContext().catch(() => null);
   const branding = ctx?.branding ?? DEFAULT_BRANDING;
 
-  if (ctx?.organizationId && branding.favicon) {
+  const icon = logoOnly ? branding.favicon : branding.tabIcon ?? branding.favicon;
+  const asset = logoOnly || !branding.tabIcon ? FAVICON_ASSET : TAB_ICON_ASSET;
+  if (ctx?.organizationId && icon) {
     try {
-      const buf = await readMediaFile(ctx.organizationId, FAVICON_ASSET);
+      const buf = await readMediaFile(ctx.organizationId, asset);
       return new Response(new Uint8Array(buf), {
-        headers: cabeceras(branding.favicon.mime, cacheable),
+        headers: cabeceras(icon.mime, cacheable),
       });
     } catch {
       // El archivo se perdió (volumen sin montar, restauración a medias). Se
