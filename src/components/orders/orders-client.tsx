@@ -526,7 +526,7 @@ export function OrdersClient() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-w-0 flex-col">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-6 sm:py-4">
         <div className="min-w-0">
           <h2 className="text-[17px] font-bold tracking-tight">Pedidos</h2>
@@ -537,7 +537,7 @@ export function OrdersClient() {
           Actualizar
         </Button>
       </header>
-      <div className="w-full flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
+      <div className="w-full min-w-0 flex-1 space-y-6 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
 
         {!data?.connected && (
           <div className="flex items-start gap-3 rounded-md border border-warning-soft bg-warning-tint p-4 text-sm text-warning-text" role="status">
@@ -579,15 +579,15 @@ export function OrdersClient() {
           </Card>
         </div>
 
-        <Card>
-          <CardHeader className="gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <Card className="min-w-0">
+          <CardHeader className="min-w-0 gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div><CardTitle>Todos los pedidos</CardTitle><CardDescription>Los pedidos quedan asociados a su contacto y se ordenan por actividad reciente.</CardDescription></div>
             <div className="relative w-full sm:max-w-xs">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
               <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar pedido, contacto o producto" className="pl-9" aria-label="Buscar pedidos" />
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="min-w-0 space-y-4">
             <div className="flex flex-wrap gap-2" role="group" aria-label="Pedidos">
               <Button type="button" size="sm" variant={!showDeleted ? "secondary" : "ghost"} aria-pressed={!showDeleted} onClick={() => { setShowDeleted(false); setActionOrderId(null); }}>
                 Todos <span className="ml-1 text-text-3">{data?.orders.length ?? 0}</span>
@@ -606,7 +606,7 @@ export function OrdersClient() {
                 {[0, 1, 2].map((item) => <div key={item} className="h-16 animate-pulse border-b last:border-0 bg-card" />)}
               </div>
             ) : orders.length ? (
-              <div className="overflow-x-auto rounded-lg border bg-card">
+              <div className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain rounded-lg border bg-card">
                 <table aria-label="Pedidos registrados" className="w-full min-w-[1180px] table-fixed text-sm">
                   <colgroup>
                     <col className="w-[9%]" />
