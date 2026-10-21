@@ -174,6 +174,7 @@ export function AppNav({
 
       <PwaControls
         onActivity={() => void refetchUnread()}
+        appName={branding.name}
         showControls={false}
       />
 
