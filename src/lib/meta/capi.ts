@@ -81,6 +81,41 @@ export type CapiAck = {
   raw: unknown;
 };
 
+/**
+ * Devuelve el único dataset que Meta asocia a la cuenta de WhatsApp.
+ *
+ * Este POST es idempotente: si el WABA ya tiene dataset, Meta devuelve el
+ * existente; si no, lo crea. Nunca se debe confiar en un dataset digitado a
+ * mano porque un dataset genérico no queda asociado al WABA y rechaza los
+ * eventos con el opaco "Invalid parameter".
+ */
+export async function ensureWhatsAppDataset(input: {
+  wabaId: string;
+  token: string;
+}): Promise<string> {
+  const res = await graphRequest<{
+    id?: unknown;
+    dataset_id?: unknown;
+    data?: Array<{ id?: unknown }>;
+  }>(`${input.wabaId}/dataset`, {
+    method: "POST",
+    token: input.token,
+  });
+
+  const candidate = res?.id ?? res?.dataset_id ?? res?.data?.[0]?.id;
+  const datasetId =
+    typeof candidate === "string" || typeof candidate === "number"
+      ? String(candidate).trim()
+      : "";
+
+  if (!/^\d+$/.test(datasetId)) {
+    throw new Error(
+      "Meta no devolvió el ID del dataset asociado a la cuenta de WhatsApp"
+    );
+  }
+  return datasetId;
+}
+
 export async function sendBusinessMessagingEvent(input: {
   datasetId: string;
   token: string;
@@ -93,6 +128,22 @@ export async function sendBusinessMessagingEvent(input: {
       `"${input.event.eventName}" no está en el catálogo de eventos ` +
         `business_messaging de Meta (${META_BUSINESS_MESSAGING_EVENTS.join(", ")})`
     );
+  }
+
+  if (input.event.eventName === "Purchase") {
+    const value = input.event.customData?.value;
+    const currency = input.event.customData?.currency;
+    if (
+      typeof value !== "number" ||
+      !Number.isFinite(value) ||
+      value <= 0 ||
+      typeof currency !== "string" ||
+      !/^[A-Z]{3}$/.test(currency)
+    ) {
+      throw new Error(
+        "Purchase exige custom_data.value positivo y currency ISO 4217"
+      );
+    }
   }
 
   const res = await graphRequest<{
