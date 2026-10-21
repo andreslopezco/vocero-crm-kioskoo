@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { apiError, parseBody, withAuth } from "@/lib/api";
+import { ensureWhatsAppDataset } from "@/lib/meta/capi";
+import { MetaApiError } from "@/lib/meta/client";
 import {
   atribucionDisabledResponse,
   atribucionEnabled,
@@ -45,17 +47,34 @@ export const PUT = withAuth(async (session, req: Request) => {
   const body = await parseBody(req, putSchema);
   if (!body.ok) return body.response;
 
-  let token = body.data.token;
-  if (!token) {
-    const credentials = await getCredentialsByOrg(session.organizationId);
-    if (!credentials) {
-      return apiError(
-        409,
-        "sin_whatsapp",
-        "No hay conexión de WhatsApp de la cual reusar el token: pega uno explícito"
-      );
-    }
-    token = credentials.token;
+  const credentials = await getCredentialsByOrg(session.organizationId);
+  if (!credentials) {
+    return apiError(
+      409,
+      "sin_whatsapp",
+      "No hay conexión de WhatsApp para identificar su dataset"
+    );
+  }
+  const token = body.data.token ?? credentials.token;
+
+  let datasetId: string;
+  try {
+    datasetId = await ensureWhatsAppDataset({
+      wabaId: credentials.wabaId,
+      token,
+    });
+  } catch (err) {
+    const detail =
+      err instanceof MetaApiError
+        ? err.diagnosticMessage
+        : err instanceof Error
+          ? err.message
+          : String(err);
+    return apiError(
+      err instanceof MetaApiError && err.status >= 500 ? 502 : 422,
+      "dataset_meta_invalido",
+      `Meta no pudo obtener el dataset asociado a WhatsApp: ${detail}`
+    );
   }
 
   const qualifiedStageId = body.data.qualifiedStageId ?? null;
@@ -72,11 +91,11 @@ export const PUT = withAuth(async (session, req: Request) => {
 
   await saveCapiSettings({
     organizationId: session.organizationId,
-    datasetId: body.data.datasetId,
+    datasetId,
     token,
     qualifiedStageId,
   });
-  return Response.json({ ok: true });
+  return Response.json({ ok: true, datasetId });
 });
 
 export const DELETE = withAuth(async (session) => {
