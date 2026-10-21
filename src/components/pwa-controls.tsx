@@ -40,7 +40,7 @@ function sonar(context: AudioContext) {
     oscillator.type = "sine";
     oscillator.frequency.value = frequency;
     gain.gain.setValueAtTime(0.0001, start + offset);
-    gain.gain.exponentialRampToValueAtTime(0.11, start + offset + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.24, start + offset + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + offset + 0.16);
     oscillator.connect(gain);
     gain.connect(context.destination);
