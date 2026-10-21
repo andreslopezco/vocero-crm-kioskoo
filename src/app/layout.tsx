@@ -54,7 +54,10 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     // El `?v=` cambia con la marca: los navegadores guardan el favicon con una
     // insistencia notable y, sin eso, el logo nuevo tarda días en aparecer.
-    icons: { icon: faviconHref(branding), apple: appleTouchIconHref(branding) },
+    icons: {
+      icon: faviconHref(branding),
+      apple: [{ url: appleTouchIconHref(branding), sizes: "180x180", type: "image/png" }],
+    },
   };
 }
 
