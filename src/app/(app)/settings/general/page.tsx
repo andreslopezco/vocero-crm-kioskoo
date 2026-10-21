@@ -1,6 +1,10 @@
 import { PwaControls } from "@/components/pwa-controls";
+import { getBranding } from "@/server/branding";
+import { getSessionOrNull } from "@/lib/auth/session";
 
-export default function GeneralSettingsPage() {
+export default async function GeneralSettingsPage() {
+  const session = await getSessionOrNull();
+  const branding = await getBranding(session?.organizationId);
   return (
     <section className="max-w-2xl">
       <div className="mb-6">
@@ -10,7 +14,7 @@ export default function GeneralSettingsPage() {
           Administra cómo recibes avisos y sonido de los mensajes en este dispositivo.
         </p>
       </div>
-      <PwaControls handleEvents={false} />
+      <PwaControls appName={branding.name} handleEvents={false} />
     </section>
   );
 }
