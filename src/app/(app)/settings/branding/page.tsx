@@ -1,6 +1,7 @@
 import { BrandingClient } from "@/components/settings/branding-client";
 import { FaviconCard } from "@/components/settings/favicon-card";
 import { AppIconCard } from "@/components/settings/app-icon-card";
+import { TabIconCard } from "@/components/settings/tab-icon-card";
 import { getBranding } from "@/server/branding";
 import { getSessionOrNull } from "@/lib/auth/session";
 import { enabledChannels } from "@/server/channels/enabled";
@@ -24,6 +25,7 @@ export default async function BrandingSettingsPage() {
         kicker={navKicker([...enabledChannels()])}
       />
       <FaviconCard branding={branding} />
+      <TabIconCard branding={branding} />
       <AppIconCard branding={branding} />
     </div>
   );
