@@ -8,6 +8,7 @@ import { getCatalogSnapshot } from "@/server/catalog/service";
 import { LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE, dropiOrderContainsOnlyMappedProducts, dropiOrderProductIds, dropiProductIdFromAttributes } from "./product-mapping";
 import { callDropiTool, listDropiTools } from "./mcp-client";
 import { listDropiOrdersForContact } from "./linked-orders";
+import type { WhatsappOrderDto } from "@/lib/types";
 
 const EXPECTED_STATUS = "PENDIENTE CONFIRMACION";
 
@@ -96,6 +97,7 @@ export function dropiPayloadFromConfirmedFicha(input: {
   catalogProducts: MappedOrderProduct[];
   createOrderSchema: unknown;
   rateType: string;
+  catalogOrder?: WhatsappOrderDto | null;
 }): Record<string, unknown> | null {
   if (!input.rateType.trim()) return null;
   const schemaDef = input.createOrderSchema as {
@@ -113,20 +115,24 @@ export function dropiPayloadFromConfirmedFicha(input: {
     items?: { properties?: Record<string, unknown>; required?: string[] };
   } | undefined;
 
-  const sku = fichaText(input.ficha, ["sku", "retailerId", "productSku"]);
-  const interest = fichaText(input.ficha, ["producto interes", "producto", "product"]);
-  const normalizedSku = sku ? normalizedFichaKey(sku) : null;
-  const normalizedInterest = interest ? normalizedFichaKey(interest) : null;
-  const product = input.catalogProducts.find((item) =>
-    (normalizedSku && normalizedFichaKey(item.retailerId) === normalizedSku) ||
-    (normalizedInterest && normalizedFichaKey(item.name) === normalizedInterest)
-  );
-  if (!product) return null;
-  const productId = dropiProductIdFromAttributes({ [LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE]: product.dropiProductId });
-  const price = parseCatalogOrderPrice(product.price);
-  const quantityText = fichaText(input.ficha, ["cantidad", "quantity"]);
-  const quantity = quantityText && /^\d+$/.test(quantityText) ? Number(quantityText) : NaN;
-  if (!productId || !price || !Number.isSafeInteger(quantity) || quantity <= 0) return null;
+  const selectedItems = input.catalogOrder?.items.length
+    ? input.catalogOrder.items.map((item) => ({ retailerId: item.retailerId, quantity: item.quantity }))
+    : (() => {
+        const retailerId = fichaText(input.ficha, ["sku", "retailerId", "productSku"]);
+        const quantity = fichaText(input.ficha, ["cantidad", "quantity"]);
+        return retailerId && quantity ? [{ retailerId, quantity }] : [];
+      })();
+  if (!selectedItems.length) return null;
+  const products = selectedItems.map((selected) => {
+    const quantity = /^\d+$/.test(selected.quantity) ? Number(selected.quantity) : NaN;
+    const normalizedSku = normalizedFichaKey(selected.retailerId);
+    const product = input.catalogProducts.find((item) => normalizedFichaKey(item.retailerId) === normalizedSku);
+    if (!product || !Number.isSafeInteger(quantity) || quantity <= 0) return null;
+    const productId = dropiProductIdFromAttributes({ [LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE]: product.dropiProductId });
+    const price = parseCatalogOrderPrice(product.price);
+    return productId && price ? { productId, price, quantity } : null;
+  });
+  if (products.some((item) => item === null)) return null;
 
   const fullName = fichaText(input.ficha, ["nombre completo", "nombre", "name"]);
   const nameParts = fullName?.split(/\s+/).filter(Boolean) ?? [];
@@ -134,7 +140,7 @@ export function dropiPayloadFromConfirmedFicha(input: {
   const values: Record<string, unknown> = {};
   const set = (candidates: string[], value: unknown) => {
     const key = propertyKey(candidates);
-    if (key) values[key] = value;
+    if (key && value !== null && value !== undefined && value !== "") values[key] = value;
     return key;
   };
   set(["name", "firstName", "customerName"], nameParts[0]);
@@ -156,15 +162,19 @@ export function dropiPayloadFromConfirmedFicha(input: {
   const priceKey = itemKey(["price", "unitPrice"]);
   const quantityKey = itemKey(["quantity", "qty"]);
   if (!idKey || !priceKey || !quantityKey) return null;
-  const productLine: Record<string, unknown> = {
-    [idKey]: Number(productId),
-    [priceKey]: price,
-    [quantityKey]: quantity,
-  };
-  if ((itemSchema.required ?? []).some((key) => productLine[key] === undefined)) return null;
-  values[productsKey] = [productLine];
+  const productLines = products.map((product) => ({
+    [idKey]: Number(product!.productId),
+    [priceKey]: product!.price,
+    [quantityKey]: product!.quantity,
+  }));
+  if ((itemSchema.required ?? []).some((key) => productLines.some((line) => line[key] === undefined))) return null;
+  values[productsKey] = productLines;
 
-  const missing = (schemaDef.required ?? []).filter((key) => values[key] === undefined || values[key] === null || values[key] === "");
+  // El correo es opcional para el negocio aunque un esquema remoto lo marque required.
+  const missing = (schemaDef.required ?? []).filter((key) =>
+    !["email", "clientemail", "customeremail"].includes(normalizedFichaKey(key)) &&
+    (values[key] === undefined || values[key] === null || values[key] === "")
+  );
   return missing.length ? null : values;
 }
 
@@ -186,7 +196,7 @@ export function isAffirmativeOrderSummaryConfirmation(affirmation: string, histo
 export function dropiPayloadForConfirmedTurn(input: {
   action: string;
   affirmation: string;
-  history: { direction: string; text: string | null }[];
+  history: { direction: string; text: string | null; order?: WhatsappOrderDto | null }[];
   ficha: Record<string, string | number | boolean | null>;
   catalogProducts: MappedOrderProduct[];
   createOrderSchema: unknown;
@@ -198,7 +208,10 @@ export function dropiPayloadForConfirmedTurn(input: {
   ) {
     return null;
   }
-  return dropiPayloadFromConfirmedFicha(input);
+  const catalogOrder = [...input.history].reverse().find(
+    (message) => message.direction === "in" && message.order?.items.length
+  )?.order;
+  return dropiPayloadFromConfirmedFicha({ ...input, catalogOrder });
 }
 
 
@@ -254,7 +267,10 @@ export async function createPendingOrder(input: {
   if (rateTypeKey && (payload[rateTypeKey] === undefined || payload[rateTypeKey] === null || payload[rateTypeKey] === "")) {
     payload[rateTypeKey] = connection.rateType;
   }
-  const missing = (schemaDef.required ?? []).filter((key) => payload[key] === undefined || payload[key] === null || payload[key] === "");
+  const missing = (schemaDef.required ?? []).filter((key) =>
+    !["email", "clientemail", "customeremail"].includes(key.toLowerCase().replace(/[^a-z0-9]/g, "")) &&
+    (payload[key] === undefined || payload[key] === null || payload[key] === "")
+  );
   if (missing.length) throw new DropiOrderError(`Faltan datos obligatorios del pedido: ${missing.join(", ")}.`, "missing_fields");
 
   const rowId = newId("dropiOrderSubmission");
