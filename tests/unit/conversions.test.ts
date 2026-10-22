@@ -12,37 +12,19 @@ import {
  */
 
 describe("purchaseCustomData", () => {
-  it("convierte centavos a unidades de la moneda", () => {
-    // La base protege el dinero en centavos enteros; Meta espera unidades.
-    expect(purchaseCustomData({ amountCents: 45050, currency: "MXN" })).toEqual({
-      lead_stage: "won",
+  it("convierte centavos a unidades y normaliza la moneda", () => {
+    expect(purchaseCustomData({ amountCents: 45050, currency: "mxn" })).toEqual({
       value: 450.5,
       currency: "MXN",
     });
   });
 
-  it("sin monto, la venta se cuenta pero SIN precio", () => {
-    // `value: 0` no significa "no sé cuánto": le enseñaría al optimizador que
-    // las ventas de este negocio valen nada.
-    expect(purchaseCustomData({ amountCents: null, currency: "MXN" })).toEqual({
-      lead_stage: "won",
-    });
-    expect(purchaseCustomData({ amountCents: 0, currency: "MXN" })).toEqual({
-      lead_stage: "won",
-    });
-  });
-
-  it("un monto negativo tampoco inventa un valor", () => {
-    expect(purchaseCustomData({ amountCents: -100, currency: "MXN" })).toEqual({
-      lead_stage: "won",
-    });
-  });
-
-  it("sin moneda capturada, manda el valor sin moneda antes que inventarla", () => {
-    expect(purchaseCustomData({ amountCents: 12300, currency: null })).toEqual({
-      lead_stage: "won",
-      value: 123,
-    });
+  it("no construye un Purchase si falta monto o moneda válidos", () => {
+    expect(purchaseCustomData({ amountCents: null, currency: "MXN" })).toBeNull();
+    expect(purchaseCustomData({ amountCents: 0, currency: "MXN" })).toBeNull();
+    expect(purchaseCustomData({ amountCents: -100, currency: "MXN" })).toBeNull();
+    expect(purchaseCustomData({ amountCents: 12300, currency: null })).toBeNull();
+    expect(purchaseCustomData({ amountCents: 12300, currency: "PESO" })).toBeNull();
   });
 });
 

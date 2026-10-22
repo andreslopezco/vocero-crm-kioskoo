@@ -9,19 +9,50 @@ import { getEnv } from "@/lib/env";
 export class MetaApiError extends Error {
   status: number;
   code: number | null;
+  subcode: number | null;
   type: string | null;
+  fbTraceId: string | null;
+  userTitle: string | null;
+  userMessage: string | null;
   details: unknown;
 
   constructor(
     message: string,
-    opts: { status: number; code?: number | null; type?: string | null; details?: unknown }
+    opts: {
+      status: number;
+      code?: number | null;
+      subcode?: number | null;
+      type?: string | null;
+      fbTraceId?: string | null;
+      userTitle?: string | null;
+      userMessage?: string | null;
+      details?: unknown;
+    }
   ) {
     super(message);
     this.name = "MetaApiError";
     this.status = opts.status;
     this.code = opts.code ?? null;
+    this.subcode = opts.subcode ?? null;
     this.type = opts.type ?? null;
+    this.fbTraceId = opts.fbTraceId ?? null;
+    this.userTitle = opts.userTitle ?? null;
+    this.userMessage = opts.userMessage ?? null;
     this.details = opts.details;
+  }
+
+  /** Mensaje útil para la bitácora sin exponer el token ni el body enviado. */
+  get diagnosticMessage(): string {
+    const parts = [
+      this.message,
+      this.status ? `HTTP ${this.status}` : null,
+      this.code !== null ? `code ${this.code}` : null,
+      this.subcode !== null ? `subcode ${this.subcode}` : null,
+      this.userTitle,
+      this.userMessage,
+      this.fbTraceId ? `fbtrace_id ${this.fbTraceId}` : null,
+    ];
+    return parts.filter((part): part is string => Boolean(part)).join(" | ");
   }
 
   /**
@@ -74,12 +105,27 @@ export async function graphRequest<T>(
   }
 
   if (!res.ok) {
-    const err = (json as { error?: { message?: string; code?: number; type?: string } })
-      ?.error;
+    const err = (
+      json as {
+        error?: {
+          message?: string;
+          code?: number;
+          error_subcode?: number;
+          type?: string;
+          fbtrace_id?: string;
+          error_user_title?: string;
+          error_user_msg?: string;
+        };
+      }
+    )?.error;
     throw new MetaApiError(err?.message ?? `Meta respondió ${res.status}`, {
       status: res.status,
       code: err?.code ?? null,
+      subcode: err?.error_subcode ?? null,
       type: err?.type ?? null,
+      fbTraceId: err?.fbtrace_id ?? null,
+      userTitle: err?.error_user_title ?? null,
+      userMessage: err?.error_user_msg ?? null,
       details: json ?? text,
     });
   }
