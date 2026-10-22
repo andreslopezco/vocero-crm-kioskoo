@@ -6,6 +6,7 @@ import {
   LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE,
 } from "@/server/dropi/product-mapping";
 import {
+  dropiPayloadForConfirmedTurn,
   dropiPayloadFromConfirmedFicha,
   isAffirmativeOrderSummaryConfirmation,
 } from "@/server/dropi/orders";
@@ -80,6 +81,59 @@ describe("mapeo de productos locales a Dropi", () => {
     expect(isAffirmativeOrderSummaryConfirmation("Sí, todo está correcto", history)).toBe(true);
     expect(isAffirmativeOrderSummaryConfirmation("Sí, pero cambia la dirección", history)).toBe(false);
     expect(isAffirmativeOrderSummaryConfirmation("Sí", [{ direction: "out", text: "Hola, ¿en qué puedo ayudarte?" }])).toBe(false);
+  });
+
+  it.each(["handoff", "reply", "none"])(
+    "prepara el pedido confirmado aunque el modelo devuelva %s",
+    (action) => {
+      const payload = dropiPayloadForConfirmedTurn({
+        action,
+        affirmation: "Sí, todo está correcto",
+        history: [{ direction: "out", text: "Resumen del pedido. Confirma si todo está correcto." }],
+        ficha: {
+          "Nombre completo": "Cliente de Prueba",
+          Telefono: "3000000000",
+          Departamento: "Cundinamarca",
+          Ciudad: "Bogotá",
+          Direccion: "Dirección de prueba",
+          Cantidad: "1",
+          SKU: "SKU-01",
+        },
+        catalogProducts: [{
+          retailerId: "SKU-01",
+          name: "Producto de prueba",
+          dropiProductId: "12345",
+          price: "100000 COP",
+          currency: "COP",
+        }],
+        rateType: "CON RECAUDO",
+        createOrderSchema: {
+          type: "object",
+          properties: {
+            name: {}, surname: {}, phone: {}, state: {}, city: {}, dir: {}, rate_type: {},
+            products: { items: { properties: { id: {}, price: {}, quantity: {} }, required: ["id", "price", "quantity"] } },
+          },
+          required: ["name", "surname", "phone", "state", "city", "dir", "products", "rate_type"],
+        },
+      });
+
+      expect(payload).toMatchObject({
+        rate_type: "CON RECAUDO",
+        products: [{ id: 12345, price: 100000, quantity: 1 }],
+      });
+    }
+  );
+
+  it("no reemplaza una acción de pedido ya construida por el modelo", () => {
+    expect(dropiPayloadForConfirmedTurn({
+      action: "create_dropi_order",
+      affirmation: "Sí",
+      history: [{ direction: "out", text: "Resumen del pedido. Confirma si está correcto." }],
+      ficha: {},
+      catalogProducts: [],
+      createOrderSchema: null,
+      rateType: "CON RECAUDO",
+    })).toBeNull();
   });
 
   it("rechaza productos de Dropi que no estén vinculados en el catálogo local", () => {

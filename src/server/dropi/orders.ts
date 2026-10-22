@@ -183,6 +183,24 @@ export function isAffirmativeOrderSummaryConfirmation(affirmation: string, histo
     (summary.includes("confirmacion") || summary.includes("correcto"));
 }
 
+export function dropiPayloadForConfirmedTurn(input: {
+  action: string;
+  affirmation: string;
+  history: { direction: string; text: string | null }[];
+  ficha: Record<string, string | number | boolean | null>;
+  catalogProducts: MappedOrderProduct[];
+  createOrderSchema: unknown;
+  rateType: string;
+}): Record<string, unknown> | null {
+  if (
+    !["handoff", "reply", "none"].includes(input.action) ||
+    !isAffirmativeOrderSummaryConfirmation(input.affirmation, input.history)
+  ) {
+    return null;
+  }
+  return dropiPayloadFromConfirmedFicha(input);
+}
+
 
 export async function createPendingOrder(input: {
   organizationId: string;
