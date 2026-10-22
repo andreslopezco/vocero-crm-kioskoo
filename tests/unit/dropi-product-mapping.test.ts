@@ -30,12 +30,12 @@ describe("mapeo de productos locales a Dropi", () => {
   it("prepara un pedido al confirmar el resumen cuando la ficha y el SKU están completos", () => {
     const payload = dropiPayloadFromConfirmedFicha({
       ficha: {
-        "Nombre completo": "Andrés López",
-        Telefono: "3102307059",
-        Departamento: "Santander",
-        Ciudad: "Floridablanca",
-        Direccion: "Cra 24 #35-30 Blq 6 Apto 503",
-        Correo: "andres@example.com",
+        "Nombre completo": "Cliente de Prueba",
+        Telefono: "3000000000",
+        Departamento: "Cundinamarca",
+        Ciudad: "Bogotá",
+        Direccion: "Calle 1 # 1-1",
+        Correo: "cliente@example.test",
         Cantidad: "1",
         SKU: "SKU-01",
       },
@@ -58,18 +58,18 @@ describe("mapeo de productos locales a Dropi", () => {
       },
     });
     expect(payload).toMatchObject({
-      name: "Andrés",
-      surname: "López",
-      phone: "3102307059",
-      state: "Santander",
-      city: "Floridablanca",
-      dir: "Cra 24 #35-30 Blq 6 Apto 503",
-      client_email: "andres@example.com",
+      name: "Cliente",
+      surname: "de Prueba",
+      phone: "3000000000",
+      state: "Cundinamarca",
+      city: "Bogotá",
+      dir: "Calle 1 # 1-1",
+      client_email: "cliente@example.test",
       rate_type: "CON RECAUDO",
       products: [{ id: 12345, price: 309900, quantity: 1 }],
     });
     expect(dropiPayloadFromConfirmedFicha({
-      ficha: { "Nombre completo": "Andrés López", SKU: "NO-MAP", Cantidad: "1" },
+      ficha: { "Nombre completo": "Cliente de Prueba", SKU: "NO-MAP", Cantidad: "1" },
       catalogProducts: [],
       createOrderSchema: { type: "object" },
       rateType: "CON RECAUDO",
@@ -123,6 +123,55 @@ describe("mapeo de productos locales a Dropi", () => {
       });
     }
   );
+
+  it("usa el carrito estructurado del catálogo y permite omitir el correo", () => {
+    const payload = dropiPayloadForConfirmedTurn({
+      action: "handoff",
+      affirmation: "Sí",
+      history: [
+        {
+          direction: "in",
+          text: "Pedido solicitado desde el catálogo",
+          order: {
+            catalogId: "catalog-test",
+            note: null,
+            items: [{ retailerId: "SKU-01", productName: "Producto de prueba", quantity: "2", unitPrice: "99900", currency: "COP" }],
+          },
+        },
+        { direction: "out", text: "Resumen de tu solicitud. ¿Todo está correcto?" },
+      ],
+      ficha: {
+        "Nombre completo": "Cliente de Prueba",
+        Telefono: "3000000000",
+        Departamento: "Cundinamarca",
+        Ciudad: "Bogotá",
+        Direccion: "Dirección de prueba",
+      },
+      catalogProducts: [{
+        retailerId: "SKU-01",
+        name: "Producto de prueba",
+        dropiProductId: "12345",
+        price: "100000 COP",
+        currency: "COP",
+      }],
+      rateType: "CON RECAUDO",
+      createOrderSchema: {
+        type: "object",
+        properties: {
+          name: {}, surname: {}, phone: {}, state: {}, city: {}, dir: {},
+          client_email: {}, rate_type: {},
+          products: { items: { properties: { id: {}, price: {}, quantity: {} }, required: ["id", "price", "quantity"] } },
+        },
+        required: ["name", "surname", "phone", "state", "city", "dir", "products", "rate_type", "client_email"],
+      },
+    });
+
+    expect(payload).toMatchObject({
+      products: [{ id: 12345, price: 100000, quantity: 2 }],
+      rate_type: "CON RECAUDO",
+    });
+    expect(payload).not.toHaveProperty("client_email");
+  });
 
   it("no reemplaza una acción de pedido ya construida por el modelo", () => {
     expect(dropiPayloadForConfirmedTurn({
