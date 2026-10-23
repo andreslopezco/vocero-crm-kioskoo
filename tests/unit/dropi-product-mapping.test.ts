@@ -35,6 +35,40 @@ describe("mapeo de productos locales a Dropi", () => {
     ])).toBe(true);
   });
 
+  it("prepara desde un resumen confirmado cuando la ficha quedó vacía", () => {
+    const payload = dropiPayloadForConfirmedTurn({
+      action: "handoff",
+      affirmation: "Sí, es correcto",
+      history: [{ direction: "out", text: [
+        "Este es el resumen de tu solicitud:",
+        "📦 Producto: Set de Utensilios Negro",
+        "Cantidad: 1",
+        "- Nombre: Cliente Prueba",
+        "- Celular: 3000000000",
+        "- Departamento: Santander",
+        "- Ciudad: Floridablanca",
+        "- Dirección: Calle de prueba 123",
+        "¿Confirmas que todo está correcto?",
+      ].join("\n") }],
+      ficha: {},
+      catalogProducts: [{ retailerId: "SKU-NEGRO", name: "Set de Utensilios Negro", dropiProductId: "12345", price: "99900 COP", currency: "COP" }],
+      rateType: "CON RECAUDO",
+      createOrderSchema: {
+        type: "object",
+        properties: {
+          name: {}, surname: {}, phone: {}, state: {}, city: {}, dir: {}, rate_type: {},
+          products: { items: { properties: { id: {}, price: {}, quantity: {} }, required: ["id", "price", "quantity"] } },
+        },
+        required: ["name", "surname", "phone", "state", "city", "dir", "products", "rate_type"],
+      },
+    });
+    expect(payload).toMatchObject({
+      name: "Cliente", surname: "Prueba", phone: "3000000000", state: "Santander",
+      city: "Floridablanca", dir: "Calle de prueba 123", rate_type: "CON RECAUDO",
+      products: [{ id: 12345, price: 99900, quantity: 1 }],
+    });
+  });
+
   it("normaliza IDs numéricos de las líneas de pedido", () => {
     expect(dropiOrderProductIds([{ id: 12345, quantity: 2 }])).toEqual(["12345"]);
     expect(dropiOrderProductIds([{ id: "12345", quantity: 2 }])).toEqual(["12345"]);
