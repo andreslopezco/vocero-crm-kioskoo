@@ -8,6 +8,7 @@ import {
 import {
   dropiPayloadForConfirmedTurn,
   dropiPayloadFromConfirmedFicha,
+  dropiToolsForAgent,
   isAffirmativeOrderSummaryConfirmation,
 } from "@/server/dropi/orders";
 
@@ -17,6 +18,15 @@ describe("mapeo de productos locales a Dropi", () => {
     expect(dropiProductIdFromAttributes({ [LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE]: "0" })).toBeNull();
     expect(dropiProductIdFromAttributes({ [LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE]: "sku-1" })).toBeNull();
     expect(dropiProductIdFromAttributes({ dropi_product_id: "12345" })).toBeNull();
+  });
+
+  it("presenta el correo como opcional al agente aunque Dropi lo marque required", () => {
+    const tools = dropiToolsForAgent([
+      { name: "create_order", inputSchema: { type: "object", required: ["name", "client_email", "products"] } },
+      { name: "get_order", inputSchema: { type: "object", required: ["id"] } },
+    ]);
+    expect((tools[0]!.inputSchema as { required: string[] }).required).toEqual(["name", "products"]);
+    expect((tools[1]!.inputSchema as { required: string[] }).required).toEqual(["id"]);
   });
 
   it("normaliza IDs numéricos de las líneas de pedido", () => {

@@ -12,6 +12,23 @@ import type { WhatsappOrderDto } from "@/lib/types";
 
 const EXPECTED_STATUS = "PENDIENTE CONFIRMACION";
 
+export function dropiToolsForAgent<T extends { name: string; inputSchema?: unknown }>(tools: T[]): T[] {
+  return tools.map((tool) => {
+    if (tool.name !== "create_order") return tool;
+    const inputSchema = tool.inputSchema as { required?: string[] } | undefined;
+    if (!inputSchema?.required) return tool;
+    return {
+      ...tool,
+      inputSchema: {
+        ...inputSchema,
+        required: inputSchema.required.filter(
+          (key) => !["email", "clientemail", "customeremail"].includes(normalizedFichaKey(key))
+        ),
+      },
+    } as T;
+  });
+}
+
 export class DropiOrderError extends Error {
   constructor(message: string, readonly code: string) { super(message); }
 }
@@ -25,6 +42,7 @@ export async function dropiPromptContext(organizationId: string, query: string, 
     const dropiProductId = dropiProductIdFromAttributes(product.attributes);
     return dropiProductId ? [{ retailerId: product.retailerId, name: product.name, dropiProductId, price: product.price, currency: product.currency }] : [];
   });
+  const tools = dropiToolsForAgent(connection.bundle.tools ?? []);
   const productTool = connection.bundle.tools?.find((tool) => tool.name === "list_products");
   const productSchema = productTool?.inputSchema as { properties?: Record<string, unknown>; required?: string[] } | undefined;
   if (productTool) {
@@ -44,7 +62,7 @@ export async function dropiPromptContext(organizationId: string, query: string, 
   return {
     rateType: connection.rateType,
     orderCreationEnabled: connection.orderCreationEnabled,
-    tools: connection.bundle.tools ?? [],
+    tools,
     productData,
     catalogProducts,
     linkedOrders: contactId
