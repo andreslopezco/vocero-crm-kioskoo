@@ -199,7 +199,7 @@ export function dropiPayloadFromConfirmedFicha(input: {
 export function isAffirmativeOrderSummaryConfirmation(affirmation: string, history: { direction: string; text: string | null }[]): boolean {
   const answer = normalizedFichaKey(affirmation);
   const affirmativeAnswers = new Set([
-    "si", "siestacorrecto", "sitodoestacorrecto", "sitodoescorrecto",
+    "si", "siestacorrecto", "siescorrecto", "sitodoestacorrecto", "sitodoescorrecto",
     "correcto", "todocorrecto", "confirmo", "confirmado", "asi",
   ]);
   if (!affirmativeAnswers.has(answer)) return false;

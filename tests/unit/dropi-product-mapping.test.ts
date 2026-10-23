@@ -29,6 +29,12 @@ describe("mapeo de productos locales a Dropi", () => {
     expect((tools[1]!.inputSchema as { required: string[] }).required).toEqual(["id"]);
   });
 
+  it("reconoce la confirmación natural 'sí, es correcto' del resumen", () => {
+    expect(isAffirmativeOrderSummaryConfirmation("Sí, es correcto", [
+      { direction: "out", text: "Este es el resumen de tu solicitud de pedido. ¿Confirmas que todo está correcto?" },
+    ])).toBe(true);
+  });
+
   it("normaliza IDs numéricos de las líneas de pedido", () => {
     expect(dropiOrderProductIds([{ id: 12345, quantity: 2 }])).toEqual(["12345"]);
     expect(dropiOrderProductIds([{ id: "12345", quantity: 2 }])).toEqual(["12345"]);
