@@ -88,6 +88,18 @@ function fichaText(ficha: Record<string, string | number | boolean | null>, name
   return null;
 }
 
+function summaryField(summary: string | null | undefined, name: string): string | null {
+  if (!summary) return null;
+  const wanted = normalizedFichaKey(name);
+  for (const line of summary.split(/\r?\n/)) {
+    const match = line.match(/^\s*(?:[-•]\s*)?[^:]*:\s*(.*?)\s*$/);
+    if (!match) continue;
+    const label = line.slice(0, line.indexOf(":")).replace(/^\s*[-•\s]*/, "").replace(/^[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/, "").trim();
+    if (normalizedFichaKey(label) === wanted && match[1]) return match[1].trim();
+  }
+  return null;
+}
+
 function parseCatalogOrderPrice(value: string | null): number | null {
   if (!value) return null;
   const raw = value.trim().replace(/[^0-9.,-]/g, "");
@@ -107,8 +119,8 @@ function parseCatalogOrderPrice(value: string | null): number | null {
 
 /**
  * Respaldo determinista para la confirmación de un resumen de pedido.
- * Solo arma el payload si toda la información está en la ficha y el SKU
- * apunta a un producto local ya vinculado a Dropi.
+ * Solo arma el payload con datos de ficha o de un resumen que el cliente acaba
+ * de confirmar; el producto debe apuntar a un producto local vinculado a Dropi.
  */
 export function dropiPayloadFromConfirmedFicha(input: {
   ficha: Record<string, string | number | boolean | null>;
@@ -116,6 +128,7 @@ export function dropiPayloadFromConfirmedFicha(input: {
   createOrderSchema: unknown;
   rateType: string;
   catalogOrder?: WhatsappOrderDto | null;
+  confirmedSummary?: string | null;
 }): Record<string, unknown> | null {
   if (!input.rateType.trim()) return null;
   const schemaDef = input.createOrderSchema as {
@@ -138,7 +151,13 @@ export function dropiPayloadFromConfirmedFicha(input: {
     : (() => {
         const retailerId = fichaText(input.ficha, ["sku", "retailerId", "productSku"]);
         const quantity = fichaText(input.ficha, ["cantidad", "quantity"]);
-        return retailerId && quantity ? [{ retailerId, quantity }] : [];
+        if (retailerId && quantity) return [{ retailerId, quantity }];
+        const summaryProduct = summaryField(input.confirmedSummary, "Producto");
+        const summaryQuantity = summaryField(input.confirmedSummary, "Cantidad");
+        const product = summaryProduct
+          ? input.catalogProducts.find((item) => normalizedFichaKey(item.name) === normalizedFichaKey(summaryProduct))
+          : null;
+        return product && summaryQuantity ? [{ retailerId: product.retailerId, quantity: summaryQuantity }] : [];
       })();
   if (!selectedItems.length) return null;
   const products = selectedItems.map((selected) => {
@@ -152,7 +171,10 @@ export function dropiPayloadFromConfirmedFicha(input: {
   });
   if (products.some((item) => item === null)) return null;
 
-  const fullName = fichaText(input.ficha, ["nombre completo", "nombre", "name"]);
+  const summaryText = input.confirmedSummary;
+  const readField = (keys: string[], summaryName: string) =>
+    fichaText(input.ficha, keys) ?? summaryField(summaryText, summaryName);
+  const fullName = readField(["nombre completo", "nombre", "name"], "Nombre");
   const nameParts = fullName?.split(/\s+/).filter(Boolean) ?? [];
   if (nameParts.length < 2) return null;
   const values: Record<string, unknown> = {};
@@ -163,10 +185,10 @@ export function dropiPayloadFromConfirmedFicha(input: {
   };
   set(["name", "firstName", "customerName"], nameParts[0]);
   set(["surname", "lastName", "customerSurname"], nameParts.slice(1).join(" "));
-  set(["phone", "customerPhone"], fichaText(input.ficha, ["telefono", "celular", "phone"]));
-  set(["state", "department", "destinationDepartment"], fichaText(input.ficha, ["departamento", "state"]));
-  set(["city", "destinationCity"], fichaText(input.ficha, ["ciudad", "city"]));
-  set(["dir", "address", "deliveryAddress"], fichaText(input.ficha, ["direccion", "dirección", "address"]));
+  set(["phone", "customerPhone"], readField(["telefono", "celular", "phone"], "Celular"));
+  set(["state", "department", "destinationDepartment"], readField(["departamento", "state"], "Departamento"));
+  set(["city", "destinationCity"], readField(["ciudad", "city"], "Ciudad"));
+  set(["dir", "address", "deliveryAddress"], readField(["direccion", "dirección", "address"], "Dirección"));
   set(["clientEmail", "email", "customerEmail"], fichaText(input.ficha, ["correo", "email"]));
   set(["rateType"], input.rateType);
 
@@ -229,7 +251,12 @@ export function dropiPayloadForConfirmedTurn(input: {
   const catalogOrder = [...input.history].reverse().find(
     (message) => message.direction === "in" && message.order?.items.length
   )?.order;
-  return dropiPayloadFromConfirmedFicha({ ...input, catalogOrder });
+  const confirmedSummary = [...input.history].reverse().find(
+    (message) => message.direction === "out" && message.text &&
+      normalizedFichaKey(message.text).includes("resumen") &&
+      (normalizedFichaKey(message.text).includes("solicitud") || normalizedFichaKey(message.text).includes("pedido"))
+  )?.text;
+  return dropiPayloadFromConfirmedFicha({ ...input, catalogOrder, confirmedSummary });
 }
 
 
