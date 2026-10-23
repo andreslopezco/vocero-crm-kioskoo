@@ -8,8 +8,26 @@ import { getCatalogSnapshot } from "@/server/catalog/service";
 import { LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE, dropiOrderContainsOnlyMappedProducts, dropiOrderProductIds, dropiProductIdFromAttributes } from "./product-mapping";
 import { callDropiTool, listDropiTools } from "./mcp-client";
 import { listDropiOrdersForContact } from "./linked-orders";
+import type { WhatsappOrderDto } from "@/lib/types";
 
 const EXPECTED_STATUS = "PENDIENTE CONFIRMACION";
+
+export function dropiToolsForAgent<T extends { name: string; inputSchema?: unknown }>(tools: T[]): T[] {
+  return tools.map((tool) => {
+    if (tool.name !== "create_order") return tool;
+    const inputSchema = tool.inputSchema as { required?: string[] } | undefined;
+    if (!inputSchema?.required) return tool;
+    return {
+      ...tool,
+      inputSchema: {
+        ...inputSchema,
+        required: inputSchema.required.filter(
+          (key) => !["email", "clientemail", "customeremail"].includes(normalizedFichaKey(key))
+        ),
+      },
+    } as T;
+  });
+}
 
 export class DropiOrderError extends Error {
   constructor(message: string, readonly code: string) { super(message); }
@@ -24,6 +42,7 @@ export async function dropiPromptContext(organizationId: string, query: string, 
     const dropiProductId = dropiProductIdFromAttributes(product.attributes);
     return dropiProductId ? [{ retailerId: product.retailerId, name: product.name, dropiProductId, price: product.price, currency: product.currency }] : [];
   });
+  const tools = dropiToolsForAgent(connection.bundle.tools ?? []);
   const productTool = connection.bundle.tools?.find((tool) => tool.name === "list_products");
   const productSchema = productTool?.inputSchema as { properties?: Record<string, unknown>; required?: string[] } | undefined;
   if (productTool) {
@@ -43,7 +62,7 @@ export async function dropiPromptContext(organizationId: string, query: string, 
   return {
     rateType: connection.rateType,
     orderCreationEnabled: connection.orderCreationEnabled,
-    tools: connection.bundle.tools ?? [],
+    tools,
     productData,
     catalogProducts,
     linkedOrders: contactId
@@ -69,6 +88,18 @@ function fichaText(ficha: Record<string, string | number | boolean | null>, name
   return null;
 }
 
+function summaryField(summary: string | null | undefined, name: string): string | null {
+  if (!summary) return null;
+  const wanted = normalizedFichaKey(name);
+  for (const line of summary.split(/\r?\n/)) {
+    const match = line.match(/^\s*(?:[-•]\s*)?[^:]*:\s*(.*?)\s*$/);
+    if (!match) continue;
+    const label = line.slice(0, line.indexOf(":")).replace(/^\s*[-•\s]*/, "").replace(/^[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/, "").trim();
+    if (normalizedFichaKey(label) === wanted && match[1]) return match[1].trim();
+  }
+  return null;
+}
+
 function parseCatalogOrderPrice(value: string | null): number | null {
   if (!value) return null;
   const raw = value.trim().replace(/[^0-9.,-]/g, "");
@@ -88,14 +119,16 @@ function parseCatalogOrderPrice(value: string | null): number | null {
 
 /**
  * Respaldo determinista para la confirmación de un resumen de pedido.
- * Solo arma el payload si toda la información está en la ficha y el SKU
- * apunta a un producto local ya vinculado a Dropi.
+ * Solo arma el payload con datos de ficha o de un resumen que el cliente acaba
+ * de confirmar; el producto debe apuntar a un producto local vinculado a Dropi.
  */
 export function dropiPayloadFromConfirmedFicha(input: {
   ficha: Record<string, string | number | boolean | null>;
   catalogProducts: MappedOrderProduct[];
   createOrderSchema: unknown;
   rateType: string;
+  catalogOrder?: WhatsappOrderDto | null;
+  confirmedSummary?: string | null;
 }): Record<string, unknown> | null {
   if (!input.rateType.trim()) return null;
   const schemaDef = input.createOrderSchema as {
@@ -113,36 +146,49 @@ export function dropiPayloadFromConfirmedFicha(input: {
     items?: { properties?: Record<string, unknown>; required?: string[] };
   } | undefined;
 
-  const sku = fichaText(input.ficha, ["sku", "retailerId", "productSku"]);
-  const interest = fichaText(input.ficha, ["producto interes", "producto", "product"]);
-  const normalizedSku = sku ? normalizedFichaKey(sku) : null;
-  const normalizedInterest = interest ? normalizedFichaKey(interest) : null;
-  const product = input.catalogProducts.find((item) =>
-    (normalizedSku && normalizedFichaKey(item.retailerId) === normalizedSku) ||
-    (normalizedInterest && normalizedFichaKey(item.name) === normalizedInterest)
-  );
-  if (!product) return null;
-  const productId = dropiProductIdFromAttributes({ [LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE]: product.dropiProductId });
-  const price = parseCatalogOrderPrice(product.price);
-  const quantityText = fichaText(input.ficha, ["cantidad", "quantity"]);
-  const quantity = quantityText && /^\d+$/.test(quantityText) ? Number(quantityText) : NaN;
-  if (!productId || !price || !Number.isSafeInteger(quantity) || quantity <= 0) return null;
+  const selectedItems = input.catalogOrder?.items.length
+    ? input.catalogOrder.items.map((item) => ({ retailerId: item.retailerId, quantity: item.quantity }))
+    : (() => {
+        const retailerId = fichaText(input.ficha, ["sku", "retailerId", "productSku"]);
+        const quantity = fichaText(input.ficha, ["cantidad", "quantity"]);
+        if (retailerId && quantity) return [{ retailerId, quantity }];
+        const summaryProduct = summaryField(input.confirmedSummary, "Producto");
+        const summaryQuantity = summaryField(input.confirmedSummary, "Cantidad");
+        const product = summaryProduct
+          ? input.catalogProducts.find((item) => normalizedFichaKey(item.name) === normalizedFichaKey(summaryProduct))
+          : null;
+        return product && summaryQuantity ? [{ retailerId: product.retailerId, quantity: summaryQuantity }] : [];
+      })();
+  if (!selectedItems.length) return null;
+  const products = selectedItems.map((selected) => {
+    const quantity = /^\d+$/.test(selected.quantity) ? Number(selected.quantity) : NaN;
+    const normalizedSku = normalizedFichaKey(selected.retailerId);
+    const product = input.catalogProducts.find((item) => normalizedFichaKey(item.retailerId) === normalizedSku);
+    if (!product || !Number.isSafeInteger(quantity) || quantity <= 0) return null;
+    const productId = dropiProductIdFromAttributes({ [LOCAL_DROPI_PRODUCT_ID_ATTRIBUTE]: product.dropiProductId });
+    const price = parseCatalogOrderPrice(product.price);
+    return productId && price ? { productId, price, quantity } : null;
+  });
+  if (products.some((item) => item === null)) return null;
 
-  const fullName = fichaText(input.ficha, ["nombre completo", "nombre", "name"]);
+  const summaryText = input.confirmedSummary;
+  const readField = (keys: string[], summaryName: string) =>
+    fichaText(input.ficha, keys) ?? summaryField(summaryText, summaryName);
+  const fullName = readField(["nombre completo", "nombre", "name"], "Nombre");
   const nameParts = fullName?.split(/\s+/).filter(Boolean) ?? [];
   if (nameParts.length < 2) return null;
   const values: Record<string, unknown> = {};
   const set = (candidates: string[], value: unknown) => {
     const key = propertyKey(candidates);
-    if (key) values[key] = value;
+    if (key && value !== null && value !== undefined && value !== "") values[key] = value;
     return key;
   };
   set(["name", "firstName", "customerName"], nameParts[0]);
   set(["surname", "lastName", "customerSurname"], nameParts.slice(1).join(" "));
-  set(["phone", "customerPhone"], fichaText(input.ficha, ["telefono", "celular", "phone"]));
-  set(["state", "department", "destinationDepartment"], fichaText(input.ficha, ["departamento", "state"]));
-  set(["city", "destinationCity"], fichaText(input.ficha, ["ciudad", "city"]));
-  set(["dir", "address", "deliveryAddress"], fichaText(input.ficha, ["direccion", "dirección", "address"]));
+  set(["phone", "customerPhone"], readField(["telefono", "celular", "phone"], "Celular"));
+  set(["state", "department", "destinationDepartment"], readField(["departamento", "state"], "Departamento"));
+  set(["city", "destinationCity"], readField(["ciudad", "city"], "Ciudad"));
+  set(["dir", "address", "deliveryAddress"], readField(["direccion", "dirección", "address"], "Dirección"));
   set(["clientEmail", "email", "customerEmail"], fichaText(input.ficha, ["correo", "email"]));
   set(["rateType"], input.rateType);
 
@@ -156,22 +202,26 @@ export function dropiPayloadFromConfirmedFicha(input: {
   const priceKey = itemKey(["price", "unitPrice"]);
   const quantityKey = itemKey(["quantity", "qty"]);
   if (!idKey || !priceKey || !quantityKey) return null;
-  const productLine: Record<string, unknown> = {
-    [idKey]: Number(productId),
-    [priceKey]: price,
-    [quantityKey]: quantity,
-  };
-  if ((itemSchema.required ?? []).some((key) => productLine[key] === undefined)) return null;
-  values[productsKey] = [productLine];
+  const productLines = products.map((product) => ({
+    [idKey]: Number(product!.productId),
+    [priceKey]: product!.price,
+    [quantityKey]: product!.quantity,
+  }));
+  if ((itemSchema.required ?? []).some((key) => productLines.some((line) => line[key] === undefined))) return null;
+  values[productsKey] = productLines;
 
-  const missing = (schemaDef.required ?? []).filter((key) => values[key] === undefined || values[key] === null || values[key] === "");
+  // El correo es opcional para el negocio aunque un esquema remoto lo marque required.
+  const missing = (schemaDef.required ?? []).filter((key) =>
+    !["email", "clientemail", "customeremail"].includes(normalizedFichaKey(key)) &&
+    (values[key] === undefined || values[key] === null || values[key] === "")
+  );
   return missing.length ? null : values;
 }
 
 export function isAffirmativeOrderSummaryConfirmation(affirmation: string, history: { direction: string; text: string | null }[]): boolean {
   const answer = normalizedFichaKey(affirmation);
   const affirmativeAnswers = new Set([
-    "si", "siestacorrecto", "sitodoestacorrecto", "sitodoescorrecto",
+    "si", "siestacorrecto", "siescorrecto", "sitodoestacorrecto", "sitodoescorrecto",
     "correcto", "todocorrecto", "confirmo", "confirmado", "asi",
   ]);
   if (!affirmativeAnswers.has(answer)) return false;
@@ -181,6 +231,32 @@ export function isAffirmativeOrderSummaryConfirmation(affirmation: string, histo
   return summary.includes("resumen") &&
     (summary.includes("solicitud") || summary.includes("pedido")) &&
     (summary.includes("confirmacion") || summary.includes("correcto"));
+}
+
+export function dropiPayloadForConfirmedTurn(input: {
+  action: string;
+  affirmation: string;
+  history: { direction: string; text: string | null; order?: WhatsappOrderDto | null }[];
+  ficha: Record<string, string | number | boolean | null>;
+  catalogProducts: MappedOrderProduct[];
+  createOrderSchema: unknown;
+  rateType: string;
+}): Record<string, unknown> | null {
+  if (
+    !["handoff", "reply", "none"].includes(input.action) ||
+    !isAffirmativeOrderSummaryConfirmation(input.affirmation, input.history)
+  ) {
+    return null;
+  }
+  const catalogOrder = [...input.history].reverse().find(
+    (message) => message.direction === "in" && message.order?.items.length
+  )?.order;
+  const confirmedSummary = [...input.history].reverse().find(
+    (message) => message.direction === "out" && message.text &&
+      normalizedFichaKey(message.text).includes("resumen") &&
+      (normalizedFichaKey(message.text).includes("solicitud") || normalizedFichaKey(message.text).includes("pedido"))
+  )?.text;
+  return dropiPayloadFromConfirmedFicha({ ...input, catalogOrder, confirmedSummary });
 }
 
 
@@ -236,7 +312,10 @@ export async function createPendingOrder(input: {
   if (rateTypeKey && (payload[rateTypeKey] === undefined || payload[rateTypeKey] === null || payload[rateTypeKey] === "")) {
     payload[rateTypeKey] = connection.rateType;
   }
-  const missing = (schemaDef.required ?? []).filter((key) => payload[key] === undefined || payload[key] === null || payload[key] === "");
+  const missing = (schemaDef.required ?? []).filter((key) =>
+    !["email", "clientemail", "customeremail"].includes(key.toLowerCase().replace(/[^a-z0-9]/g, "")) &&
+    (payload[key] === undefined || payload[key] === null || payload[key] === "")
+  );
   if (missing.length) throw new DropiOrderError(`Faltan datos obligatorios del pedido: ${missing.join(", ")}.`, "missing_fields");
 
   const rowId = newId("dropiOrderSubmission");
