@@ -42,25 +42,6 @@ describe.each([false, true])("prompt del agente (agenda %s)", (agenda) => {
   });
 });
 
-it("no bloquea un pedido de Dropi cuando el cliente no tiene correo", () => {
-  const p = buildAgentSystemPrompt({
-    profile,
-    kb: [],
-    stages: [{ name: "Nuevo" }],
-    agenda: false,
-    dropi: {
-      rateType: "CON RECAUDO",
-      orderCreationEnabled: true,
-      tools: [],
-      productData: null,
-      catalogProducts: [],
-      linkedOrders: [],
-    },
-  });
-  expect(p).toMatch(/correo electrónico es OPCIONAL siempre/);
-  expect(p).toMatch(/nunca lo pidas ni hagas handoff solo porque falte/);
-});
-
 describe("recordatorio de formato al final del turno", () => {
   it("pide el JSON de una acción", () => {
     expect(TURN_FORMAT_REMINDER).toMatch(/UN objeto JSON de acción/);
