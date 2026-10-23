@@ -41,7 +41,7 @@ import {
   catalogProductsText,
 } from "@/server/catalog/context";
 import { dropiOrdersEnabled } from "@/server/dropi/flag";
-import { createPendingOrder, dropiPromptContext, dropiPayloadForConfirmedTurn, isAffirmativeOrderSummaryConfirmation, DropiOrderError } from "@/server/dropi/orders";
+import { createPendingOrder, dropiPromptContext, dropiPayloadFromConfirmedFicha, isAffirmativeOrderSummaryConfirmation, DropiOrderError } from "@/server/dropi/orders";
 
 /**
  * Turno del agente (FR-021..FR-025).
@@ -352,31 +352,23 @@ export async function runAgentTurn(
   }
 
   let action: AgentActionType = result.data;
-  // La confirmación del cliente es el hecho determinante. El modelo puede
-  // contestar reply, none o handoff aun con la ficha completa; en esos casos
-  // prepara la solicitud de forma determinista desde la ficha y el SKU.
+  // Si el cliente acaba de confirmar el resumen y el modelo solo emitió handoff,
+  // prepara la solicitud de forma determinista desde la ficha y el SKU vinculado.
   if (
+    action.action === "handoff" &&
     dropi?.orderCreationEnabled &&
     dropi.rateType &&
     lastInbound.text &&
     isAffirmativeOrderSummaryConfirmation(lastInbound.text, history)
   ) {
     const createSchema = dropi.tools.find((tool) => tool.name === "create_order")?.inputSchema;
-    const payload = dropiPayloadForConfirmedTurn({
-      action: action.action,
-      affirmation: lastInbound.text,
-      history,
+    const payload = dropiPayloadFromConfirmedFicha({
       ficha: contactFicha,
       catalogProducts: dropi.catalogProducts,
       createOrderSchema: createSchema,
       rateType: dropi.rateType,
     });
-    if (payload) {
-      console.info("[dropi] confirmación válida: solicitud preparada por respaldo determinista");
-      action = { action: "create_dropi_order", payload };
-    } else if (["handoff", "reply", "none"].includes(action.action)) {
-      console.warn(`[dropi] confirmación válida sin payload completo; acción conservada: ${action.action}`);
-    }
+    if (payload) action = { action: "create_dropi_order", payload };
   }
 
   if (action.action === "create_dropi_order") {
