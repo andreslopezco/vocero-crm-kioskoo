@@ -57,8 +57,8 @@ describe("mapeo de productos locales a Dropi", () => {
       },
     });
     expect(payload).toMatchObject({
-      name: "Andrés",
-      surname: "López",
+      name: "Cliente",
+      surname: "Prueba",
       phone: "3000000000",
       state: "Cundinamarca",
       city: "Bogotá",
