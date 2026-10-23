@@ -29,12 +29,12 @@ describe("mapeo de productos locales a Dropi", () => {
   it("prepara un pedido al confirmar el resumen cuando la ficha y el SKU están completos", () => {
     const payload = dropiPayloadFromConfirmedFicha({
       ficha: {
-        "Nombre completo": "Andrés López",
-        Telefono: "3102307059",
-        Departamento: "Santander",
-        Ciudad: "Floridablanca",
-        Direccion: "Cra 24 #35-30 Blq 6 Apto 503",
-        Correo: "andres@example.com",
+        "Nombre completo": "Cliente Prueba",
+        Telefono: "3000000000",
+        Departamento: "Cundinamarca",
+        Ciudad: "Bogotá",
+        Direccion: "Calle 1 # 1-1",
+        Correo: "cliente@example.test",
         Cantidad: "1",
         SKU: "SKU-01",
       },
@@ -59,16 +59,16 @@ describe("mapeo de productos locales a Dropi", () => {
     expect(payload).toMatchObject({
       name: "Andrés",
       surname: "López",
-      phone: "3102307059",
-      state: "Santander",
-      city: "Floridablanca",
-      dir: "Cra 24 #35-30 Blq 6 Apto 503",
-      client_email: "andres@example.com",
+      phone: "3000000000",
+      state: "Cundinamarca",
+      city: "Bogotá",
+      dir: "Calle 1 # 1-1",
+      client_email: "cliente@example.test",
       rate_type: "CON RECAUDO",
       products: [{ id: 12345, price: 309900, quantity: 1 }],
     });
     expect(dropiPayloadFromConfirmedFicha({
-      ficha: { "Nombre completo": "Andrés López", SKU: "NO-MAP", Cantidad: "1" },
+      ficha: { "Nombre completo": "Cliente Prueba", SKU: "NO-MAP", Cantidad: "1" },
       catalogProducts: [],
       createOrderSchema: { type: "object" },
       rateType: "CON RECAUDO",
